@@ -2,7 +2,7 @@
 import { storageService } from "../services/storageService";
 import { authEndpoint } from "./endpoints/auth.endpoint";
 import { tasksEndpoint, projectsEndpoint } from "./endpoints/tasks.endpoint";
-import { clientsEndpoint, contractsEndpoint, employeesEndpoint, dealsEndpoint } from "./endpoints/crm.endpoint";
+import { clientsEndpoint, contractsEndpoint, employeesEndpoint, dealsEndpoint, oneTimeDealsEndpoint, accountsReceivableEndpoint } from "./endpoints/crm.endpoint";
 import { docsEndpoint, foldersEndpoint, meetingsEndpoint, contentPostsEndpoint } from "./endpoints/content.endpoint";
 import { tablesEndpoint, activityEndpoint, statusesEndpoint, prioritiesEndpoint, notificationPrefsEndpoint, automationEndpoint } from "./endpoints/settings.endpoint";
 import { departmentsEndpoint, financeEndpoint } from "./endpoints/finance.endpoint";

@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react';
 import { api } from '../../backend/api';
 import { FAVICON_SVG_DATA_URI } from '../../components/AppIcons';
 import { storageService } from '../../services/storageService';
-import { pollTelegramUpdates } from '../../services/telegramService';
-import { Comment, Deal, Task, BusinessProcess } from '../../types';
+import { pollTelegramUpdates, sendTelegramNotification, formatDealMessage, formatDealStatusChangeMessage, formatClientMessage, formatContractMessage, formatPurchaseRequestMessage, formatDocumentMessage, formatMeetingMessage } from '../../services/telegramService';
+import { Comment, Deal, Task, BusinessProcess, Client, Contract, PurchaseRequest, Doc, Meeting } from '../../types';
 
 import { useAuthLogic } from './slices/useAuthLogic';
 import { useTaskLogic } from './slices/useTaskLogic';
@@ -148,8 +148,13 @@ export const useAppLogic = () => {
                        settingsSlice.state.tables.find(t => t.type === 'docs');
       const targetTableId = docsTable?.id || '';
       
+      const existing = docData.id ? contentSlice.state.docs.find(d => d.id === docData.id) : null;
       const newDoc = contentSlice.actions.saveDoc(docData, targetTableId, docData.folderId);
       if (newDoc) {
+          // Отправляем уведомление, если это новый документ
+          if (!existing && settingsSlice.state.notificationPrefs?.docCreated?.telegram && authSlice.state.currentUser) {
+            sendTelegramNotification(formatDocumentMessage(newDoc.title, authSlice.state.currentUser.name)).catch(() => {});
+          }
           // Обновляем данные после сохранения
           refreshData();
           if (docData.type === 'internal') { 
@@ -329,9 +334,69 @@ export const useAppLogic = () => {
     actions: {
       login: authSlice.actions.login, logout: authSlice.actions.logout, updateUsers: authSlice.actions.updateUsers, updateProfile: authSlice.actions.updateProfile, openProfile: authSlice.actions.openProfile, closeProfile: authSlice.actions.closeProfile,
       updateProjects: taskSlice.actions.updateProjects, updateStatuses: taskSlice.actions.updateStatuses, updatePriorities: taskSlice.actions.updatePriorities, quickCreateProject: taskSlice.actions.quickCreateProject, saveTask: saveTaskWrapper, deleteTask: taskSlice.actions.deleteTask, restoreTask: taskSlice.actions.restoreTask, permanentDeleteTask: taskSlice.actions.permanentDeleteTask, openTaskModal: taskSlice.actions.openTaskModal, closeTaskModal: taskSlice.actions.closeTaskModal, addTaskComment: taskSlice.actions.addTaskComment, addTaskAttachment: taskSlice.actions.addTaskAttachment, addTaskDocAttachment: taskSlice.actions.addTaskDocAttachment,
-      saveClient: crmSlice.actions.saveClient, deleteClient: crmSlice.actions.deleteClient, saveContract: crmSlice.actions.saveContract, deleteContract: crmSlice.actions.deleteContract, saveEmployee: crmSlice.actions.saveEmployee, deleteEmployee: crmSlice.actions.deleteEmployee, saveDeal: crmSlice.actions.saveDeal, deleteDeal: crmSlice.actions.deleteDeal,
-      saveMeeting: contentSlice.actions.saveMeeting, updateMeetingSummary: contentSlice.actions.updateMeetingSummary, savePost: contentSlice.actions.savePost, deletePost: contentSlice.actions.deletePost, saveDoc: saveDocWrapper, saveDocContent: contentSlice.actions.saveDocContent, deleteDoc: contentSlice.actions.deleteDoc, createFolder: contentSlice.actions.createFolder, deleteFolder: contentSlice.actions.deleteFolder, handleDocClick: handleDocClickWrapper, openDocModal: contentSlice.actions.openDocModal, openEditDocModal: contentSlice.actions.openEditDocModal, closeDocModal: contentSlice.actions.closeDocModal,
-      saveDepartment: financeSlice.actions.saveDepartment, deleteDepartment: financeSlice.actions.deleteDepartment, saveFinanceCategory: financeSlice.actions.saveFinanceCategory, deleteFinanceCategory: financeSlice.actions.deleteFinanceCategory, updateFinancePlan: financeSlice.actions.updateFinancePlan, savePurchaseRequest: financeSlice.actions.savePurchaseRequest, deletePurchaseRequest: financeSlice.actions.deletePurchaseRequest, saveFinancialPlanDocument: financeSlice.actions.saveFinancialPlanDocument, deleteFinancialPlanDocument: financeSlice.actions.deleteFinancialPlanDocument, saveFinancialPlanning: financeSlice.actions.saveFinancialPlanning, deleteFinancialPlanning: financeSlice.actions.deleteFinancialPlanning,
+      saveClient: (client: Client) => {
+        const existing = crmSlice.state.clients.find(c => c.id === client.id);
+        crmSlice.actions.saveClient(client);
+        if (!existing && settingsSlice.state.notificationPrefs?.clientCreated?.telegram && authSlice.state.currentUser) {
+          sendTelegramNotification(formatClientMessage(client.name, authSlice.state.currentUser.name)).catch(() => {});
+        }
+      },
+      deleteClient: crmSlice.actions.deleteClient,
+      saveContract: (contract: Contract) => {
+        const existing = crmSlice.state.contracts.find(c => c.id === contract.id);
+        crmSlice.actions.saveContract(contract);
+        if (!existing && settingsSlice.state.notificationPrefs?.contractCreated?.telegram && authSlice.state.currentUser) {
+          const client = crmSlice.state.clients.find(c => c.id === contract.clientId);
+          sendTelegramNotification(formatContractMessage(contract.number, client?.name || 'Неизвестный клиент', contract.amount, authSlice.state.currentUser.name)).catch(() => {});
+        }
+      },
+      deleteContract: crmSlice.actions.deleteContract,
+      saveEmployee: crmSlice.actions.saveEmployee,
+      deleteEmployee: crmSlice.actions.deleteEmployee,
+      saveDeal: (deal: Deal) => {
+        const existing = crmSlice.state.deals.find(d => d.id === deal.id);
+        const oldStage = existing?.stage;
+        crmSlice.actions.saveDeal(deal);
+        if (!existing && settingsSlice.state.notificationPrefs?.dealCreated?.telegram && authSlice.state.currentUser) {
+          const assignee = authSlice.state.users.find(u => u.id === deal.assigneeId);
+          sendTelegramNotification(formatDealMessage(deal.title, deal.stage, deal.amount, assignee?.name || 'Не назначено')).catch(() => {});
+        } else if (existing && oldStage !== deal.stage && settingsSlice.state.notificationPrefs?.dealStatusChanged?.telegram && authSlice.state.currentUser) {
+          sendTelegramNotification(formatDealStatusChangeMessage(deal.title, oldStage || 'Новая', deal.stage, authSlice.state.currentUser.name)).catch(() => {});
+        }
+      },
+      deleteDeal: crmSlice.actions.deleteDeal,
+      saveOneTimeDeal: crmSlice.actions.saveOneTimeDeal,
+      deleteOneTimeDeal: crmSlice.actions.deleteOneTimeDeal,
+      saveAccountsReceivable: crmSlice.actions.saveAccountsReceivable,
+      deleteAccountsReceivable: crmSlice.actions.deleteAccountsReceivable,
+      saveMeeting: (meeting: Meeting) => {
+        const existing = contentSlice.state.meetings.find(m => m.id === meeting.id);
+        contentSlice.actions.saveMeeting(meeting);
+        if (!existing && settingsSlice.state.notificationPrefs?.meetingCreated?.telegram && authSlice.state.currentUser) {
+          sendTelegramNotification(formatMeetingMessage(meeting.title, meeting.date, meeting.time, authSlice.state.currentUser.name)).catch(() => {});
+        }
+      },
+      updateMeetingSummary: contentSlice.actions.updateMeetingSummary,
+      savePost: contentSlice.actions.savePost,
+      deletePost: contentSlice.actions.deletePost,
+      saveDoc: saveDocWrapper,
+      saveDocContent: contentSlice.actions.saveDocContent,
+      deleteDoc: contentSlice.actions.deleteDoc,
+      createFolder: contentSlice.actions.createFolder,
+      deleteFolder: contentSlice.actions.deleteFolder,
+      handleDocClick: handleDocClickWrapper,
+      openDocModal: contentSlice.actions.openDocModal,
+      openEditDocModal: contentSlice.actions.openEditDocModal,
+      closeDocModal: contentSlice.actions.closeDocModal,
+      saveDepartment: financeSlice.actions.saveDepartment, deleteDepartment: financeSlice.actions.deleteDepartment, saveFinanceCategory: financeSlice.actions.saveFinanceCategory, deleteFinanceCategory: financeSlice.actions.deleteFinanceCategory, updateFinancePlan: financeSlice.actions.updateFinancePlan, savePurchaseRequest: (request: PurchaseRequest) => {
+        const existing = financeSlice.state.purchaseRequests.find(r => r.id === request.id);
+        financeSlice.actions.savePurchaseRequest(request);
+        if (!existing && settingsSlice.state.notificationPrefs?.purchaseRequestCreated?.telegram && authSlice.state.currentUser) {
+          const department = financeSlice.state.departments.find(d => d.id === request.departmentId);
+          sendTelegramNotification(formatPurchaseRequestMessage(request.title || 'Заявка', request.amount || 0, department?.name || 'Не указан', authSlice.state.currentUser.name)).catch(() => {});
+        }
+      },
+      deletePurchaseRequest: financeSlice.actions.deletePurchaseRequest, saveFinancialPlanDocument: financeSlice.actions.saveFinancialPlanDocument, deleteFinancialPlanDocument: financeSlice.actions.deleteFinancialPlanDocument, saveFinancialPlanning: financeSlice.actions.saveFinancialPlanning, deleteFinancialPlanning: financeSlice.actions.deleteFinancialPlanning,
       saveWarehouse: inventorySlice.actions.saveWarehouse, deleteWarehouse: inventorySlice.actions.deleteWarehouse, saveInventoryItem: inventorySlice.actions.saveItem, deleteInventoryItem: inventorySlice.actions.deleteItem, createInventoryMovement: inventorySlice.actions.createMovement,
       savePosition: bpmSlice.actions.savePosition, deletePosition: bpmSlice.actions.deletePosition, saveProcess: bpmSlice.actions.saveProcess, deleteProcess: bpmSlice.actions.deleteProcess,
       toggleDarkMode: settingsSlice.actions.toggleDarkMode, createTable: createTableWrapper, updateTable: settingsSlice.actions.updateTable, deleteTable: settingsSlice.actions.deleteTable, markAllRead: settingsSlice.actions.markAllRead, navigate: settingsSlice.actions.navigate, openSettings: settingsSlice.actions.openSettings, closeSettings: settingsSlice.actions.closeSettings, openCreateTable: settingsSlice.actions.openCreateTable, closeCreateTable: settingsSlice.actions.closeCreateTable, openEditTable: settingsSlice.actions.openEditTable, closeEditTable: settingsSlice.actions.closeEditTable, updateNotificationPrefs: settingsSlice.actions.updateNotificationPrefs, saveAutomationRule: settingsSlice.actions.saveAutomationRule, deleteAutomationRule: settingsSlice.actions.deleteAutomationRule, setActiveSpaceTab: settingsSlice.actions.setActiveSpaceTab, onUpdateTelegramBotToken: (token: string) => { storageService.setEmployeeBotToken(token); },

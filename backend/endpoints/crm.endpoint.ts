@@ -1,6 +1,6 @@
 
 import { storageService } from "../../services/storageService";
-import { Client, Contract, EmployeeInfo, Deal } from "../../types";
+import { Client, Contract, EmployeeInfo, Deal, OneTimeDeal, AccountsReceivable } from "../../types";
 
 export const clientsEndpoint = {
   getAll: () => storageService.getClients(),

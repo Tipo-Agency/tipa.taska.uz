@@ -74,8 +74,8 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
             targetUser: 'admin',
             template: '🔔 <b>Требует согласования:</b> {task_title}\n\nПожалуйста, проверьте документ.',
             buttons: [
-                { label: '✅ Одобрить', action: 'change_status', value: 'Выполнено' },
-                { label: '❌ Вернуть', action: 'change_status', value: 'В работе' }
+                { text: '✅ Одобрить', action: 'approve', callbackData: 'change_status:Выполнено' },
+                { text: '❌ Вернуть', action: 'reject', callbackData: 'change_status:В работе' }
             ]
         }
     }

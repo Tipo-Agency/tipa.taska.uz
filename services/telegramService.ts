@@ -1,5 +1,4 @@
 
-import { TELEGRAM_CHAT_ID } from "../constants";
 import { TelegramButtonConfig, Deal, Comment } from "../types";
 import { storageService } from "./storageService";
 
@@ -8,8 +7,15 @@ import { storageService } from "./storageService";
 export const sendTelegramNotification = async (message: string, buttons?: TelegramButtonConfig[]) => {
   // Use Employee Bot Token
   const botToken = storageService.getEmployeeBotToken();
-  const chatId = TELEGRAM_CHAT_ID;
-  if (!chatId || !botToken) return false;
+  const chatId = storageService.getTelegramChatId();
+  
+  if (!chatId || !botToken) {
+    console.warn('[TELEGRAM] Не настроен bot token или chat ID:', { 
+      hasToken: !!botToken, 
+      hasChatId: !!chatId 
+    });
+    return false;
+  }
 
   const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
   
@@ -23,22 +29,31 @@ export const sendTelegramNotification = async (message: string, buttons?: Telegr
       body.reply_markup = {
           inline_keyboard: [
               buttons.map(btn => ({
-                  text: btn.label,
-                  callback_data: `${btn.action}:${btn.value}` 
+                  text: btn.text,
+                  callback_data: btn.callbackData || `${btn.action}:${btn.url || ''}` 
               }))
           ]
       };
   }
 
   try {
-    await fetch(telegramUrl, {
+    const response = await fetch(telegramUrl, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body)
     });
+    
+    const result = await response.json();
+    
+    if (!result.ok) {
+      console.error('[TELEGRAM EMPLOYEE] Send failed:', result.description || result);
+      return false;
+    }
+    
+    console.log('[TELEGRAM EMPLOYEE] Notification sent successfully');
     return true;
   } catch (error) {
-    console.warn('[TELEGRAM EMPLOYEE] Send failed', error);
+    console.error('[TELEGRAM EMPLOYEE] Send failed', error);
     return false;
   }
 };
@@ -142,4 +157,32 @@ export const formatStatusChangeMessage = (taskTitle: string, oldStatus: string, 
 
 export const formatNewTaskMessage = (taskTitle: string, priority: string, endDate: string, assignee: string, project: string | null) => {
     return `🆕 <b>Новая задача</b>\n\n👤 <b>Ответственный:</b> ${assignee}\n📝 <b>Задача:</b> ${taskTitle}\n📂 <b>Модуль:</b> ${project || 'Без модуля'}\n⚡ <b>Приоритет:</b> ${priority}\n📅 <b>Срок:</b> ${endDate}`;
+};
+
+export const formatDealMessage = (dealTitle: string, stage: string, amount: number, assignee: string) => {
+    return `💼 <b>Новая сделка</b>\n\n<b>Название:</b> ${dealTitle}\n<b>Стадия:</b> ${stage}\n<b>Сумма:</b> ${amount.toLocaleString()} UZS\n<b>Ответственный:</b> ${assignee}`;
+};
+
+export const formatDealStatusChangeMessage = (dealTitle: string, oldStage: string, newStage: string, user: string) => {
+    return `🔄 <b>Изменена стадия сделки</b>\n\n<b>Сделка:</b> ${dealTitle}\n<b>Было:</b> ${oldStage}\n<b>Стало:</b> ${newStage}\n<b>Изменил:</b> ${user}`;
+};
+
+export const formatClientMessage = (clientName: string, user: string) => {
+    return `👤 <b>Новый клиент</b>\n\n<b>Клиент:</b> ${clientName}\n<b>Добавил:</b> ${user}`;
+};
+
+export const formatContractMessage = (contractNumber: string, clientName: string, amount: number, user: string) => {
+    return `📄 <b>Новый договор</b>\n\n<b>Номер:</b> ${contractNumber}\n<b>Клиент:</b> ${clientName}\n<b>Сумма:</b> ${amount.toLocaleString()} UZS\n<b>Добавил:</b> ${user}`;
+};
+
+export const formatPurchaseRequestMessage = (requestTitle: string, amount: number, department: string, user: string) => {
+    return `💰 <b>Новая заявка на покупку</b>\n\n<b>Название:</b> ${requestTitle}\n<b>Сумма:</b> ${amount.toLocaleString()} UZS\n<b>Отдел:</b> ${department}\n<b>Создал:</b> ${user}`;
+};
+
+export const formatDocumentMessage = (docTitle: string, user: string) => {
+    return `📑 <b>Новый документ</b>\n\n<b>Название:</b> ${docTitle}\n<b>Добавил:</b> ${user}`;
+};
+
+export const formatMeetingMessage = (meetingTitle: string, date: string, time: string, user: string) => {
+    return `📅 <b>Новая встреча</b>\n\n<b>Название:</b> ${meetingTitle}\n<b>Дата:</b> ${new Date(date).toLocaleDateString('ru-RU')}\n<b>Время:</b> ${time}\n<b>Создал:</b> ${user}`;
 };

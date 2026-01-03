@@ -313,11 +313,12 @@ export interface ContentPost {
   id: string;
   tableId: string; // ID страницы контент плана для проекта (contentPlanPages.id)
   topic: string; 
+  description?: string; // Описание поста (идея, концепция)
   date: string; // ISO дата
   platform: string[]; 
   format: 'post' | 'reel' | 'story' | 'article' | 'video';
   status: 'idea' | 'copywriting' | 'design' | 'approval' | 'scheduled' | 'published';
-  copy?: string; 
+  copy?: string; // Текст поста (готовый текст для публикации)
   mediaUrl?: string;
   isArchived?: boolean; // Архив
 }

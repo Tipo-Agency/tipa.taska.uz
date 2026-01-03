@@ -66,6 +66,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
 
   // Form State
   const [topic, setTopic] = useState('');
+  const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [platform, setPlatform] = useState<string[]>(['instagram']);
   const [format, setFormat] = useState<ContentPost['format']>('post');
@@ -73,6 +74,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
   const [copy, setCopy] = useState('');
   const initialValuesRef = useRef<{
     topic: string;
+    description: string;
     date: string;
     platform: string[];
     format: ContentPost['format'];
@@ -97,6 +99,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
       setEditingPost(null);
       const newDate = new Date().toISOString().split('T')[0];
       setTopic('');
+      setDescription('');
       setDate(newDate);
       setPlatform(['instagram']);
       setFormat('post');
@@ -104,6 +107,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
       setCopy('');
       initialValuesRef.current = {
         topic: '',
+        description: '',
         date: newDate,
         platform: ['instagram'],
         format: 'post',
@@ -117,6 +121,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
       setEditingPost(post);
       const postPlatform = Array.isArray(post.platform) ? post.platform : [post.platform as any];
       setTopic(post.topic);
+      setDescription(post.description || '');
       setDate(post.date);
       setPlatform(postPlatform);
       setFormat(post.format);
@@ -124,6 +129,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
       setCopy(post.copy || '');
       initialValuesRef.current = {
         topic: post.topic,
+        description: post.description || '',
         date: post.date,
         platform: postPlatform,
         format: post.format,
@@ -138,6 +144,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
     const initial = initialValuesRef.current;
     return (
       initial.topic !== topic ||
+      initial.description !== description ||
       initial.date !== date ||
       JSON.stringify([...initial.platform].sort()) !== JSON.stringify([...platform].sort()) ||
       initial.format !== format ||
@@ -155,15 +162,17 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
           id: editingPost ? editingPost.id : `cp-${Date.now()}`,
           tableId,
           topic,
+          description: description || undefined,
           date,
           platform,
           format,
           status,
-          copy
+          copy: copy || undefined
       };
       onSavePost(newPost);
       initialValuesRef.current = {
         topic,
+        description,
         date,
         platform,
         format,
@@ -778,8 +787,13 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                     </div>
 
                     <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase">Описание поста</label>
+                        <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full h-24 bg-gray-50 dark:bg-[#252525] text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-[#444] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="Идея, концепция, описание поста..."/>
+                    </div>
+
+                    <div>
                         <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase">Текст поста</label>
-                        <textarea value={copy} onChange={e => setCopy(e.target.value)} className="w-full h-32 bg-gray-50 dark:bg-[#252525] text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-[#444] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="Текст..."/>
+                        <textarea value={copy} onChange={e => setCopy(e.target.value)} className="w-full h-32 bg-gray-50 dark:bg-[#252525] text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-[#444] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="Готовый текст для публикации..."/>
                     </div>
                     
                     </div>
