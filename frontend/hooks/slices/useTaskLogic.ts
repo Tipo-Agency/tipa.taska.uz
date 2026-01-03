@@ -91,7 +91,7 @@ export const useTaskLogic = (showNotification: (msg: string) => void, currentUse
             updatedTasks = tasks.map(t => t.id === taskData.id ? newTask : t);
             
             if (currentUser && taskData.status && oldStatus !== taskData.status) {
-                if (notificationPrefs.statusChange.telegram) {
+                if (notificationPrefs?.statusChange?.telegram) {
                     sendTelegramNotification(formatStatusChangeMessage(oldTask.title, oldStatus || '?', taskData.status, currentUser.name)).catch(() => {});
                 }
                 processAutomation(newTask, 'status_change');
@@ -131,7 +131,7 @@ export const useTaskLogic = (showNotification: (msg: string) => void, currentUse
                 const assigneeName = assigneeUser ? assigneeUser.name : 'Не назначено';
                 const projectName = projects.find(p => p.id === newTask.projectId)?.name || null;
                 
-                if (notificationPrefs.newTask.telegram) {
+                if (notificationPrefs?.newTask?.telegram) {
                     sendTelegramNotification(formatNewTaskMessage(newTask.title, newTask.priority, newTask.endDate, assigneeName, projectName)).catch(() => {});
                 }
                 processAutomation(newTask, 'new_task');
@@ -189,7 +189,7 @@ export const useTaskLogic = (showNotification: (msg: string) => void, currentUse
             const assigneeName = assigneeUser ? assigneeUser.name : 'Не назначено';
             const projectName = projects.find(p => p.id === newTask.projectId)?.name || null;
             
-            if (notificationPrefs.newTask.telegram) {
+            if (notificationPrefs?.newTask?.telegram) {
                 sendTelegramNotification(formatNewTaskMessage(newTask.title, newTask.priority, newTask.endDate, assigneeName, projectName)).catch(() => {});
             }
             processAutomation(newTask, 'new_task');

@@ -61,6 +61,37 @@ export interface Contract {
   services: string; 
 }
 
+export interface OneTimeDeal {
+  id: string;
+  clientId: string;
+  number?: string; // Номер сделки (опционально)
+  date: string; // Дата сделки
+  amount: number; // Сумма сделки
+  currency: string; // Валюта
+  description: string; // Описание услуги/товара
+  status: 'pending' | 'paid' | 'overdue'; // Статус оплаты
+  dueDate?: string; // Срок оплаты (если есть)
+  paidAmount?: number; // Оплаченная сумма
+  paidDate?: string; // Дата оплаты
+  notes?: string; // Примечания
+}
+
+export interface AccountsReceivable {
+  id: string;
+  clientId: string;
+  dealId?: string; // ID разовой сделки
+  contractId?: string; // ID договора (если задолженность по договору)
+  amount: number; // Сумма задолженности
+  currency: string; // Валюта
+  dueDate: string; // Срок погашения
+  status: 'current' | 'overdue' | 'paid'; // Статус
+  description: string; // Описание
+  paidAmount?: number; // Оплаченная сумма
+  paidDate?: string; // Дата оплаты
+  createdAt: string; // Дата создания записи
+  updatedAt?: string; // Дата обновления
+}
+
 export interface Comment {
   id: string;
   text: string;

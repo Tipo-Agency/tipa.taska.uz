@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Deal, Client, Contract, User, Project, Task } from '../../types';
+import { Deal, Client, Contract, User, Project, Task, OneTimeDeal, AccountsReceivable } from '../../types';
 import SalesFunnelView from '../SalesFunnelView';
 import ClientsView from '../ClientsView';
 
@@ -9,6 +9,8 @@ interface CRMModuleProps {
   deals: Deal[];
   clients: Client[];
   contracts: Contract[];
+  oneTimeDeals?: OneTimeDeal[];
+  accountsReceivable?: AccountsReceivable[];
   users: User[];
   projects?: Project[];
   tasks?: Task[];
@@ -16,7 +18,7 @@ interface CRMModuleProps {
   autoOpenCreateModal?: boolean;
 }
 
-export const CRMModule: React.FC<CRMModuleProps> = ({ view, deals, clients, contracts, users, projects, tasks, actions, autoOpenCreateModal = false }) => {
+export const CRMModule: React.FC<CRMModuleProps> = ({ view, deals, clients, contracts, oneTimeDeals = [], accountsReceivable = [], users, projects, tasks, actions, autoOpenCreateModal = false }) => {
   if (view === 'sales-funnel') {
       return <SalesFunnelView 
         deals={deals} 
@@ -34,7 +36,20 @@ export const CRMModule: React.FC<CRMModuleProps> = ({ view, deals, clients, cont
   }
   
   if (view === 'clients') {
-      return <ClientsView clients={clients} contracts={contracts} onSaveClient={actions.saveClient} onDeleteClient={actions.deleteClient} onSaveContract={actions.saveContract} onDeleteContract={actions.deleteContract} />;
+      return <ClientsView 
+        clients={clients} 
+        contracts={contracts}
+        oneTimeDeals={oneTimeDeals}
+        accountsReceivable={accountsReceivable}
+        onSaveClient={actions.saveClient} 
+        onDeleteClient={actions.deleteClient} 
+        onSaveContract={actions.saveContract} 
+        onDeleteContract={actions.deleteContract}
+        onSaveOneTimeDeal={actions.saveOneTimeDeal}
+        onDeleteOneTimeDeal={actions.deleteOneTimeDeal}
+        onSaveAccountsReceivable={actions.saveAccountsReceivable}
+        onDeleteAccountsReceivable={actions.deleteAccountsReceivable}
+      />;
   }
 
   return null;

@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { Client, Contract, Deal, EmployeeInfo } from '../../../types';
+import { Client, Contract, Deal, EmployeeInfo, OneTimeDeal, AccountsReceivable } from '../../../types';
 import { api } from '../../../backend/api';
 import { createSaveHandler, createDeleteHandler } from '../../../utils/crudUtils';
 import { NOTIFICATION_MESSAGES } from '../../../constants/messages';
@@ -8,6 +8,8 @@ import { NOTIFICATION_MESSAGES } from '../../../constants/messages';
 export const useCRMLogic = (showNotification: (msg: string) => void) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [oneTimeDeals, setOneTimeDeals] = useState<OneTimeDeal[]>([]);
+  const [accountsReceivable, setAccountsReceivable] = useState<AccountsReceivable[]>([]);
   const [employeeInfos, setEmployeeInfos] = useState<EmployeeInfo[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
 
@@ -67,9 +69,44 @@ export const useCRMLogic = (showNotification: (msg: string) => void) => {
     NOTIFICATION_MESSAGES.DEAL_DELETED
   );
 
+  // OneTimeDeals
+  const saveOneTimeDeal = createSaveHandler(
+    setOneTimeDeals,
+    api.oneTimeDeals.updateAll,
+    showNotification,
+    'Разовая сделка сохранена'
+  );
+  const deleteOneTimeDeal = createDeleteHandler(
+    setOneTimeDeals,
+    api.oneTimeDeals.updateAll,
+    showNotification,
+    'Разовая сделка удалена'
+  );
+
+  // AccountsReceivable
+  const saveAccountsReceivable = createSaveHandler(
+    setAccountsReceivable,
+    api.accountsReceivable.updateAll,
+    showNotification,
+    'Задолженность сохранена'
+  );
+  const deleteAccountsReceivable = createDeleteHandler(
+    setAccountsReceivable,
+    api.accountsReceivable.updateAll,
+    showNotification,
+    'Задолженность удалена'
+  );
+
   return {
-    state: { clients, contracts, employeeInfos, deals },
-    setters: { setClients, setContracts, setEmployeeInfos, setDeals },
-    actions: { saveClient, deleteClient, saveContract, deleteContract, saveEmployee, deleteEmployee, saveDeal, deleteDeal }
+    state: { clients, contracts, oneTimeDeals, accountsReceivable, employeeInfos, deals },
+    setters: { setClients, setContracts, setOneTimeDeals, setAccountsReceivable, setEmployeeInfos, setDeals },
+    actions: { 
+      saveClient, deleteClient, 
+      saveContract, deleteContract, 
+      saveOneTimeDeal, deleteOneTimeDeal,
+      saveAccountsReceivable, deleteAccountsReceivable,
+      saveEmployee, deleteEmployee, 
+      saveDeal, deleteDeal 
+    }
   };
 };

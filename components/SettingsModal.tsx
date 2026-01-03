@@ -191,7 +191,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     alert(`Пользователь создан. Пароль: ${newUserPassword || '123456'}`);
   };
 
-  const handleDeleteUser = (id: string) => onUpdateUsers(users.filter(u => u.id !== id));
+  const handleDeleteUser = async (id: string) => {
+    const updatedUsers = users.filter(u => u.id !== id);
+    onUpdateUsers(updatedUsers);
+    // Сохраняем в Firestore
+    const { storageService } = await import('../services/storageService');
+    await storageService.saveToCloud();
+  };
   const handleResetPassword = async (id: string) => {
       if(confirm('Сбросить пароль?')) {
           // Хешируем новый пароль

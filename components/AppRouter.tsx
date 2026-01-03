@@ -5,7 +5,7 @@ import {
   Deal, Client, Contract, EmployeeInfo, Meeting, ContentPost, 
   Doc, Folder, TableCollection, Department, FinanceCategory, 
   FinancePlan, PurchaseRequest, FinancialPlanDocument, FinancialPlanning, OrgPosition, BusinessProcess, 
-  ViewMode, AutomationRule, Warehouse, InventoryItem, StockBalance, StockMovement 
+  ViewMode, AutomationRule, Warehouse, InventoryItem, StockBalance, StockMovement, OneTimeDeal, AccountsReceivable
 } from '../types';
 
 import HomeView from './HomeView';
@@ -39,6 +39,8 @@ interface AppRouterProps {
   deals: Deal[];
   clients: Client[];
   contracts: Contract[];
+  oneTimeDeals?: OneTimeDeal[];
+  accountsReceivable?: AccountsReceivable[];
   employeeInfos: EmployeeInfo[];
   meetings: Meeting[];
   contentPosts: ContentPost[];
@@ -210,7 +212,7 @@ export const AppRouter: React.FC<AppRouterProps> = (props) => {
   }
 
   if (view === 'sales-funnel' || view === 'clients') {
-      return <CRMModule view={view} deals={props.deals} clients={props.clients} contracts={props.contracts} users={props.users} projects={props.projects} tasks={props.allTasks} actions={actions} />;
+      return <CRMModule view={view} deals={props.deals} clients={props.clients} contracts={props.contracts} oneTimeDeals={props.oneTimeDeals} accountsReceivable={props.accountsReceivable} users={props.users} projects={props.projects} tasks={props.allTasks} actions={actions} />;
   }
 
   if (view === 'finance') {

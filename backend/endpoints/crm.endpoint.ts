@@ -12,6 +12,16 @@ export const contractsEndpoint = {
   updateAll: (contracts: Contract[]) => storageService.setContracts(contracts),
 };
 
+export const oneTimeDealsEndpoint = {
+  getAll: () => storageService.getOneTimeDeals(),
+  updateAll: (deals: OneTimeDeal[]) => storageService.setOneTimeDeals(deals),
+};
+
+export const accountsReceivableEndpoint = {
+  getAll: () => storageService.getAccountsReceivable(),
+  updateAll: (receivables: AccountsReceivable[]) => storageService.setAccountsReceivable(receivables),
+};
+
 export const employeesEndpoint = {
   getAll: () => storageService.getEmployeeInfos(),
   updateAll: (infos: EmployeeInfo[]) => storageService.setEmployeeInfos(infos),

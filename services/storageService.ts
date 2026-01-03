@@ -1,5 +1,5 @@
 
-import { Doc, Project, Role, TableCollection, Task, User, Meeting, ActivityLog, StatusOption, PriorityOption, ContentPost, Client, EmployeeInfo, Contract, Folder, Deal, NotificationPreferences, Department, FinanceCategory, FinancePlan, PurchaseRequest, OrgPosition, BusinessProcess, AutomationRule, Warehouse, InventoryItem, StockMovement } from "../types";
+import { Doc, Project, Role, TableCollection, Task, User, Meeting, ActivityLog, StatusOption, PriorityOption, ContentPost, Client, EmployeeInfo, Contract, Folder, Deal, NotificationPreferences, Department, FinanceCategory, FinancePlan, PurchaseRequest, OrgPosition, BusinessProcess, AutomationRule, Warehouse, InventoryItem, StockMovement, OneTimeDeal, AccountsReceivable } from "../types";
 import { FIREBASE_DB_URL, MOCK_PROJECTS, MOCK_TABLES, DEFAULT_STATUSES, DEFAULT_PRIORITIES, DEFAULT_NOTIFICATION_PREFS, MOCK_DEPARTMENTS, DEFAULT_FINANCE_CATEGORIES, MOCK_ORG_POSITIONS, DEFAULT_AUTOMATION_RULES, TELEGRAM_BOT_TOKEN } from "../constants";
 import { firestoreService } from "./firestoreService";
 
@@ -139,6 +139,9 @@ export const storageService = {
               // Функция для умного слияния с приоритетом облачных данных
               // При первой загрузке (force=true) - приоритет облаку
               // При обычной синхронизации - приоритет более свежим данным
+              // ВАЖНО: Если элемент есть только в облаке, но его нет локально - это может быть:
+              // 1. Новый элемент из другого устройства (добавляем)
+              // 2. Удаленный элемент (не добавляем, если локальная версия была сохранена недавно)
               const smartMergeByTimestamp = <T extends { id: string; updatedAt?: string; createdAt?: string }>(
                   cloudData: T[], 
                   localData: T[],
@@ -151,6 +154,12 @@ export const storageService = {
                   
                   // Собираем все уникальные ID
                   const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
+                  
+                  // Получаем время последнего сохранения локальных данных
+                  // Если локальные данные были сохранены недавно (менее 30 секунд назад),
+                  // значит удаление было недавним и нужно его уважать
+                  const timeSinceLastSave = Date.now() - lastSaveTime;
+                  const recentLocalSave = timeSinceLastSave < 30000; // 30 секунд
                   
                   allIds.forEach(id => {
                       const localItem = localMap.get(id);
@@ -192,9 +201,18 @@ export const storageService = {
                           // Только локальная версия - добавляем всегда (новые данные)
                           merged.push(localItem);
                       } else if (cloudItem) {
-                          // Только облачная версия - добавляем
-                          merged.push(cloudItem);
-                          hasChanges = true;
+                          // Только облачная версия
+                          // ВАЖНО: Если это не первая загрузка (force=false), и элемента нет локально,
+                          // значит он был удален локально - НЕ добавляем его обратно
+                          // Добавляем ТОЛЬКО при первой загрузке (force=true) или если локальные данные полностью пустые
+                          if (force || (localData.length === 0 && cloudData.length > 0)) {
+                              // Первая загрузка или локальные данные полностью пустые (первый запуск)
+                              // - добавляем из облака
+                              merged.push(cloudItem);
+                              hasChanges = true;
+                          }
+                          // Иначе пропускаем - элемент был удален локально и не должен возвращаться
+                          // Это предотвращает возврат удаленных элементов при синхронизации
                       }
                   });
                   
@@ -342,6 +360,24 @@ export const storageService = {
                   const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
                   if (changed) {
                       setLocal(STORAGE_KEYS.CONTRACTS, merged);
+                      hasChanges = true;
+                  }
+              }
+              if (data.oneTimeDeals) {
+                  const normalized = normalizeArray(data.oneTimeDeals);
+                  const current = getLocal(STORAGE_KEYS.ONE_TIME_DEALS, []);
+                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
+                  if (changed) {
+                      setLocal(STORAGE_KEYS.ONE_TIME_DEALS, merged);
+                      hasChanges = true;
+                  }
+              }
+              if (data.accountsReceivable) {
+                  const normalized = normalizeArray(data.accountsReceivable);
+                  const current = getLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, []);
+                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
+                  if (changed) {
+                      setLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, merged);
                       hasChanges = true;
                   }
               }
@@ -511,6 +547,8 @@ export const storageService = {
           priorities: getLocal(STORAGE_KEYS.PRIORITIES, DEFAULT_PRIORITIES),
           clients: getLocal(STORAGE_KEYS.CLIENTS, []),
           contracts: getLocal(STORAGE_KEYS.CONTRACTS, []),
+          oneTimeDeals: getLocal(STORAGE_KEYS.ONE_TIME_DEALS, []),
+          accountsReceivable: getLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, []),
           employeeInfos: getLocal(STORAGE_KEYS.EMPLOYEE_INFOS, []),
           deals: getLocal(STORAGE_KEYS.DEALS, []),
           notificationPrefs: getLocal(STORAGE_KEYS.NOTIFICATION_PREFS, DEFAULT_NOTIFICATION_PREFS),
@@ -571,6 +609,8 @@ export const storageService = {
   getPriorities: (): PriorityOption[] => getLocal(STORAGE_KEYS.PRIORITIES, DEFAULT_PRIORITIES),
   getClients: (): Client[] => getLocal(STORAGE_KEYS.CLIENTS, []),
   getContracts: (): Contract[] => getLocal(STORAGE_KEYS.CONTRACTS, []),
+  getOneTimeDeals: (): OneTimeDeal[] => getLocal(STORAGE_KEYS.ONE_TIME_DEALS, []),
+  getAccountsReceivable: (): AccountsReceivable[] => getLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, []),
   getEmployeeInfos: (): EmployeeInfo[] => getLocal(STORAGE_KEYS.EMPLOYEE_INFOS, []),
   getDeals: (): Deal[] => getLocal(STORAGE_KEYS.DEALS, []),
   getNotificationPrefs: (): NotificationPreferences => getLocal(STORAGE_KEYS.NOTIFICATION_PREFS, DEFAULT_NOTIFICATION_PREFS),
@@ -664,6 +704,14 @@ export const storageService = {
   setContracts: (contracts: Contract[]) => { 
     setLocal(STORAGE_KEYS.CONTRACTS, contracts); 
     storageService.saveToCloud().catch(err => console.error('Failed to save contracts to cloud:', err)); 
+  },
+  setOneTimeDeals: (deals: OneTimeDeal[]) => { 
+    setLocal(STORAGE_KEYS.ONE_TIME_DEALS, deals); 
+    storageService.saveToCloud().catch(err => console.error('Failed to save one-time deals to cloud:', err)); 
+  },
+  setAccountsReceivable: (receivables: AccountsReceivable[]) => { 
+    setLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, receivables); 
+    storageService.saveToCloud().catch(err => console.error('Failed to save accounts receivable to cloud:', err)); 
   },
   setEmployeeInfos: (infos: EmployeeInfo[]) => { 
     setLocal(STORAGE_KEYS.EMPLOYEE_INFOS, infos); 

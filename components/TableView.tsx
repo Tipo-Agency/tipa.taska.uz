@@ -69,14 +69,28 @@ const CustomSelect = ({ value, options, onChange, type }: { value: string, optio
                 setIsOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        // Используем capture phase для более раннего перехвата
+        document.addEventListener('mousedown', handleClickOutside, true);
+        return () => document.removeEventListener('mousedown', handleClickOutside, true);
     }, []);
 
     return (
-        <div className="relative w-full" ref={containerRef} onClick={(e) => e.stopPropagation()}>
+        <div 
+            className="relative w-full" 
+            ref={containerRef} 
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onMouseDown={(e) => { e.stopPropagation(); }}
+        >
             <div 
-                onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+                onClick={(e) => { 
+                    e.stopPropagation(); 
+                    e.preventDefault();
+                    setIsOpen(!isOpen); 
+                }}
+                onMouseDown={(e) => { 
+                    e.stopPropagation(); 
+                    e.preventDefault();
+                }}
                 className={`px-2 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all w-full text-center flex items-center justify-center gap-1.5 hover:scale-105 active:scale-95 shadow-sm ${colorClass}`}
             >
                 <span className="truncate">{label}</span>
@@ -84,7 +98,11 @@ const CustomSelect = ({ value, options, onChange, type }: { value: string, optio
             </div>
             
             {isOpen && (
-                <div className="absolute top-full left-0 mt-1 w-auto min-w-full bg-white dark:bg-[#252525] border border-gray-200 dark:border-[#333] rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto custom-scrollbar p-1.5" onClick={(e) => e.stopPropagation()}>
+                <div 
+                    className="absolute top-full left-0 mt-1 w-auto min-w-full bg-white dark:bg-[#252525] border border-gray-200 dark:border-[#333] rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto custom-scrollbar p-1.5" 
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                >
                     {type === 'project' && (
                          <div 
                             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -105,7 +123,15 @@ const CustomSelect = ({ value, options, onChange, type }: { value: string, optio
                         return (
                             <div 
                                 key={opt.id}
-                                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                onMouseDown={(e) => { 
+                                    e.preventDefault(); 
+                                    e.stopPropagation(); 
+                                    // Вызываем onChange сразу на mousedown для более быстрой реакции
+                                    if (type === 'status') {
+                                        onChange(val);
+                                        setIsOpen(false);
+                                    }
+                                }}
                                 onClick={(e) => { 
                                     e.preventDefault();
                                     e.stopPropagation(); 
@@ -395,12 +421,18 @@ const TableView: React.FC<TableViewProps> = ({
                           )}
 
                           {/* Статус */}
-                          <td className="py-3 px-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                          <td 
+                              className="py-3 px-4 align-middle" 
+                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                          >
                               <CustomSelect 
                                   value={task.status} 
                                   options={statuses} 
                                   type="status" 
-                                  onChange={(val) => onUpdateTask(task.id, { status: val })} 
+                                  onChange={(val) => {
+                                      onUpdateTask(task.id, { status: val });
+                                  }} 
                               />
                           </td>
 

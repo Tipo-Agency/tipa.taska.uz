@@ -27,6 +27,8 @@ export const api = {
   
   clients: clientsEndpoint,
   contracts: contractsEndpoint,
+  oneTimeDeals: oneTimeDealsEndpoint,
+  accountsReceivable: accountsReceivableEndpoint,
   employees: employeesEndpoint,
   deals: dealsEndpoint,
   

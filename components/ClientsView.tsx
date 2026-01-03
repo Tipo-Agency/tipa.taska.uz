@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Client, Contract } from '../types';
-import { Briefcase, Plus, Search, Trash2, Edit2, Phone, Calendar, DollarSign, FileText, X, Save, FileCheck, CreditCard, TrendingUp, Building } from 'lucide-react';
+import { Client, Contract, OneTimeDeal, AccountsReceivable } from '../types';
+import { Briefcase, Plus, Search, Trash2, Edit2, Phone, Calendar, DollarSign, FileText, X, Save, FileCheck, CreditCard, TrendingUp, Building, Receipt, AlertCircle } from 'lucide-react';
 import { TaskSelect } from './TaskSelect';
 import { Tabs, Button, Card } from './ui';
 import { FiltersPanel, FilterConfig } from './FiltersPanel';
@@ -9,14 +9,24 @@ import { FiltersPanel, FilterConfig } from './FiltersPanel';
 interface ClientsViewProps {
   clients: Client[];
   contracts: Contract[];
+  oneTimeDeals?: OneTimeDeal[];
+  accountsReceivable?: AccountsReceivable[];
   onSaveClient: (client: Client) => void;
   onDeleteClient: (id: string) => void;
   onSaveContract: (contract: Contract) => void;
   onDeleteContract: (id: string) => void;
+  onSaveOneTimeDeal?: (deal: OneTimeDeal) => void;
+  onDeleteOneTimeDeal?: (id: string) => void;
+  onSaveAccountsReceivable?: (receivable: AccountsReceivable) => void;
+  onDeleteAccountsReceivable?: (id: string) => void;
 }
 
-const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveClient, onDeleteClient, onSaveContract, onDeleteContract }) => {
-  const [activeTab, setActiveTab] = useState<'clients' | 'contracts' | 'finance'>('clients');
+const ClientsView: React.FC<ClientsViewProps> = ({ 
+  clients, contracts, oneTimeDeals = [], accountsReceivable = [],
+  onSaveClient, onDeleteClient, onSaveContract, onDeleteContract,
+  onSaveOneTimeDeal, onDeleteOneTimeDeal, onSaveAccountsReceivable, onDeleteAccountsReceivable
+}) => {
+  const [activeTab, setActiveTab] = useState<'clients' | 'contracts' | 'finance' | 'receivables'>('clients');
   const [searchQuery, setSearchQuery] = useState('');
   const [contractStatusFilter, setContractStatusFilter] = useState<string>('active'); // По умолчанию только активные
   const [showFilters, setShowFilters] = useState(false);
@@ -48,6 +58,33 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
   const [contractPaymentDay, setContractPaymentDay] = useState('5');
   const [contractStatus, setContractStatus] = useState<'active' | 'pending' | 'completed'>('active');
   const [contractServices, setContractServices] = useState('');
+
+  // OneTimeDeal Modals
+  const [isOneTimeDealModalOpen, setIsOneTimeDealModalOpen] = useState(false);
+  const [editingOneTimeDeal, setEditingOneTimeDeal] = useState<OneTimeDeal | null>(null);
+  const [oneTimeDealClientId, setOneTimeDealClientId] = useState<string>('');
+  const [oneTimeDealNumber, setOneTimeDealNumber] = useState('');
+  const [oneTimeDealDate, setOneTimeDealDate] = useState(new Date().toISOString().split('T')[0]);
+  const [oneTimeDealAmount, setOneTimeDealAmount] = useState('');
+  const [oneTimeDealDescription, setOneTimeDealDescription] = useState('');
+  const [oneTimeDealStatus, setOneTimeDealStatus] = useState<'pending' | 'paid' | 'overdue'>('pending');
+  const [oneTimeDealDueDate, setOneTimeDealDueDate] = useState('');
+  const [oneTimeDealPaidAmount, setOneTimeDealPaidAmount] = useState('');
+  const [oneTimeDealPaidDate, setOneTimeDealPaidDate] = useState('');
+  const [oneTimeDealNotes, setOneTimeDealNotes] = useState('');
+
+  // AccountsReceivable Modals
+  const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
+  const [editingReceivable, setEditingReceivable] = useState<AccountsReceivable | null>(null);
+  const [receivableClientId, setReceivableClientId] = useState<string>('');
+  const [receivableDealId, setReceivableDealId] = useState<string>('');
+  const [receivableContractId, setReceivableContractId] = useState<string>('');
+  const [receivableAmount, setReceivableAmount] = useState('');
+  const [receivableDueDate, setReceivableDueDate] = useState('');
+  const [receivableStatus, setReceivableStatus] = useState<'current' | 'overdue' | 'paid'>('current');
+  const [receivableDescription, setReceivableDescription] = useState('');
+  const [receivablePaidAmount, setReceivablePaidAmount] = useState('');
+  const [receivablePaidDate, setReceivablePaidDate] = useState('');
 
   // Helpers - оптимизированная фильтрация
   const filteredClients = useMemo(() => {
@@ -163,6 +200,135 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
       setIsContractModalOpen(false);
   };
 
+  // OneTimeDeal Handlers
+  const handleOpenOneTimeDealCreate = (clientId: string) => {
+    setEditingOneTimeDeal(null);
+    setOneTimeDealClientId(clientId);
+    setOneTimeDealNumber('');
+    setOneTimeDealDate(new Date().toISOString().split('T')[0]);
+    setOneTimeDealAmount('');
+    setOneTimeDealDescription('');
+    setOneTimeDealStatus('pending');
+    setOneTimeDealDueDate('');
+    setOneTimeDealPaidAmount('');
+    setOneTimeDealPaidDate('');
+    setOneTimeDealNotes('');
+    setIsOneTimeDealModalOpen(true);
+  };
+
+  const handleOpenOneTimeDealEdit = (deal: OneTimeDeal) => {
+    setEditingOneTimeDeal(deal);
+    setOneTimeDealClientId(deal.clientId);
+    setOneTimeDealNumber(deal.number || '');
+    setOneTimeDealDate(deal.date);
+    setOneTimeDealAmount(deal.amount.toString());
+    setOneTimeDealDescription(deal.description);
+    setOneTimeDealStatus(deal.status);
+    setOneTimeDealDueDate(deal.dueDate || '');
+    setOneTimeDealPaidAmount(deal.paidAmount?.toString() || '');
+    setOneTimeDealPaidDate(deal.paidDate || '');
+    setOneTimeDealNotes(deal.notes || '');
+    setIsOneTimeDealModalOpen(true);
+  };
+
+  const handleOneTimeDealSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!onSaveOneTimeDeal) return;
+    const dealId = editingOneTimeDeal ? editingOneTimeDeal.id : `otd-${Date.now()}`;
+    const deal: OneTimeDeal = {
+      id: dealId,
+      clientId: oneTimeDealClientId,
+      number: oneTimeDealNumber || undefined,
+      date: oneTimeDealDate,
+      amount: parseFloat(oneTimeDealAmount) || 0,
+      currency: 'UZS',
+      description: oneTimeDealDescription,
+      status: oneTimeDealStatus,
+      dueDate: oneTimeDealDueDate || undefined,
+      paidAmount: oneTimeDealPaidAmount ? parseFloat(oneTimeDealPaidAmount) : undefined,
+      paidDate: oneTimeDealPaidDate || undefined,
+      notes: oneTimeDealNotes || undefined
+    };
+    onSaveOneTimeDeal(deal);
+    
+    // Автоматически создаем запись о задолженности, если сделка не оплачена полностью
+    if (onSaveAccountsReceivable && deal.status !== 'paid' && !editingOneTimeDeal) {
+      const paidAmount = deal.paidAmount || 0;
+      const remainingAmount = deal.amount - paidAmount;
+      if (remainingAmount > 0) {
+        const dueDate = deal.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // По умолчанию через 30 дней
+        const now = new Date().toISOString();
+        onSaveAccountsReceivable({
+          id: `ar-${Date.now()}`,
+          clientId: deal.clientId,
+          dealId: deal.id,
+          amount: remainingAmount,
+          currency: 'UZS',
+          dueDate: dueDate,
+          status: new Date(dueDate) < new Date() ? 'overdue' : 'current',
+          description: `Задолженность по сделке: ${deal.description}`,
+          paidAmount: paidAmount > 0 ? paidAmount : undefined,
+          paidDate: deal.paidDate || undefined,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+    }
+    
+    setIsOneTimeDealModalOpen(false);
+  };
+
+  // AccountsReceivable Handlers
+  const handleOpenReceivableCreate = (clientId: string, dealId?: string, contractId?: string) => {
+    setEditingReceivable(null);
+    setReceivableClientId(clientId);
+    setReceivableDealId(dealId || '');
+    setReceivableContractId(contractId || '');
+    setReceivableAmount('');
+    setReceivableDueDate('');
+    setReceivableStatus('current');
+    setReceivableDescription('');
+    setReceivablePaidAmount('');
+    setReceivablePaidDate('');
+    setIsReceivableModalOpen(true);
+  };
+
+  const handleOpenReceivableEdit = (receivable: AccountsReceivable) => {
+    setEditingReceivable(receivable);
+    setReceivableClientId(receivable.clientId);
+    setReceivableDealId(receivable.dealId || '');
+    setReceivableContractId(receivable.contractId || '');
+    setReceivableAmount(receivable.amount.toString());
+    setReceivableDueDate(receivable.dueDate);
+    setReceivableStatus(receivable.status);
+    setReceivableDescription(receivable.description);
+    setReceivablePaidAmount(receivable.paidAmount?.toString() || '');
+    setReceivablePaidDate(receivable.paidDate || '');
+    setIsReceivableModalOpen(true);
+  };
+
+  const handleReceivableSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!onSaveAccountsReceivable) return;
+    const now = new Date().toISOString();
+    onSaveAccountsReceivable({
+      id: editingReceivable ? editingReceivable.id : `ar-${Date.now()}`,
+      clientId: receivableClientId,
+      dealId: receivableDealId || undefined,
+      contractId: receivableContractId || undefined,
+      amount: parseFloat(receivableAmount) || 0,
+      currency: 'UZS',
+      dueDate: receivableDueDate,
+      status: receivableStatus,
+      description: receivableDescription,
+      paidAmount: receivablePaidAmount ? parseFloat(receivablePaidAmount) : undefined,
+      paidDate: receivablePaidDate || undefined,
+      createdAt: editingReceivable ? editingReceivable.createdAt : now,
+      updatedAt: now
+    });
+    setIsReceivableModalOpen(false);
+  };
+
   // Modals Backdrops
   const handleClientBackdrop = (e: React.MouseEvent) => {
       if (e.target === e.currentTarget) {
@@ -210,9 +376,16 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
                            )}
                        </div>
                        
-                       <button onClick={() => handleOpenContractCreate(client.id)} className="w-full py-2 border border-dashed border-gray-200 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors flex items-center justify-center gap-1">
-                           <Plus size={14}/> Добавить договор
-                       </button>
+                       <div className="flex gap-2">
+                           <button onClick={() => handleOpenContractCreate(client.id)} className="flex-1 py-2 border border-dashed border-gray-200 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors flex items-center justify-center gap-1">
+                               <Plus size={14}/> Договор
+                           </button>
+                           {onSaveOneTimeDeal && (
+                               <button onClick={() => handleOpenOneTimeDealCreate(client.id)} className="flex-1 py-2 border border-dashed border-gray-200 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 transition-colors flex items-center justify-center gap-1">
+                                   <Receipt size={14}/> Разовая сделка
+                               </button>
+                           )}
+                       </div>
                    </Card>
                );
            })}
@@ -363,6 +536,18 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
                           <span className="sm:hidden">+</span>
                         </Button>
                     )}
+                    {activeTab === 'receivables' && onSaveAccountsReceivable && (
+                        <Button
+                          onClick={() => handleOpenReceivableCreate('')}
+                          icon={Plus}
+                          iconPosition="left"
+                          size="md"
+                          className="shrink-0"
+                        >
+                          <span className="hidden sm:inline">Добавить задолженность</span>
+                          <span className="sm:hidden">+</span>
+                        </Button>
+                    )}
                 </div>
             </div>
             
@@ -372,10 +557,11 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
                     tabs={[
                         { id: 'clients', label: 'База клиентов' },
                         { id: 'contracts', label: 'Реестр договоров' },
-                        { id: 'finance', label: 'Финансы / Оплаты' }
+                        { id: 'finance', label: 'Финансы / Оплаты' },
+                        { id: 'receivables', label: 'Задолженность' }
                     ]}
                     activeTab={activeTab}
-                    onChange={(tabId) => setActiveTab(tabId as 'clients' | 'contracts' | 'finance')}
+                    onChange={(tabId) => setActiveTab(tabId as 'clients' | 'contracts' | 'finance' | 'receivables')}
                 />
             </div>
        </div>
@@ -387,7 +573,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
                <input 
                  type="text" 
-                 placeholder={activeTab === 'clients' ? "Поиск клиентов..." : "Поиск договоров..."} 
+                 placeholder={activeTab === 'clients' ? "Поиск клиентов..." : activeTab === 'contracts' ? "Поиск договоров..." : activeTab === 'receivables' ? "Поиск задолженности..." : "Поиск..."} 
                  value={searchQuery}
                  onChange={e => setSearchQuery(e.target.value)}
                  className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-[#333] rounded-lg text-sm bg-white dark:bg-[#252525] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
@@ -398,6 +584,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
        {activeTab === 'clients' && renderClientsTab()}
        {activeTab === 'contracts' && renderContractsTab()}
        {activeTab === 'finance' && renderFinanceTab()}
+       {activeTab === 'receivables' && renderReceivablesTab()}
          </div>
        </div>
 
@@ -551,6 +738,168 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, contracts, onSaveCli
                         {editingContract && <button type="button" onClick={() => { if(confirm('Удалить договор?')) onDeleteContract(editingContract.id); setIsContractModalOpen(false); }} className="text-red-500 text-sm hover:underline">Удалить</button>}
                         <div className="flex gap-2 ml-auto">
                             <button type="button" onClick={() => setIsContractModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#303030] rounded-lg">Отмена</button>
+                            <button type="submit" className="px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-sm">Сохранить</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+       )}
+
+       {/* OneTimeDeal Modal */}
+       {isOneTimeDealModalOpen && onSaveOneTimeDeal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end md:items-center justify-center z-[80] animate-in fade-in duration-200" onClick={(e) => { if (e.target === e.currentTarget) setIsOneTimeDealModalOpen(false); }}>
+            <div className="bg-white dark:bg-[#252525] rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-[#333] flex flex-col max-h-[95vh] md:max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-gray-100 dark:border-[#333] bg-white dark:bg-[#252525] shrink-0 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-gray-800 dark:text-white">{editingOneTimeDeal ? 'Редактировать разовую сделку' : 'Новая разовая сделка'}</h2>
+                    <button onClick={() => setIsOneTimeDealModalOpen(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleOneTimeDealSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Клиент *</label>
+                        <TaskSelect
+                            value={oneTimeDealClientId}
+                            onChange={setOneTimeDealClientId}
+                            options={clients.map(c => ({ value: c.id, label: c.name }))}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Номер сделки</label>
+                            <input type="text" value={oneTimeDealNumber} onChange={e => setOneTimeDealNumber(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100" placeholder="Опционально"/>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Дата сделки *</label>
+                            <input type="date" value={oneTimeDealDate} onChange={e => setOneTimeDealDate(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100" required/>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Описание услуги/товара *</label>
+                        <textarea value={oneTimeDealDescription} onChange={e => setOneTimeDealDescription(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100" rows={3} required/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Сумма (UZS) *</label>
+                            <input type="number" value={oneTimeDealAmount} onChange={e => setOneTimeDealAmount(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" required/>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Статус</label>
+                            <TaskSelect
+                                value={oneTimeDealStatus}
+                                onChange={(val) => setOneTimeDealStatus(val as any)}
+                                options={[
+                                    { value: 'pending', label: 'Ожидает оплаты' },
+                                    { value: 'paid', label: 'Оплачено' },
+                                    { value: 'overdue', label: 'Просрочено' }
+                                ]}
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Срок оплаты</label>
+                            <input type="date" value={oneTimeDealDueDate} onChange={e => setOneTimeDealDueDate(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100"/>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Оплаченная сумма (UZS)</label>
+                            <input type="number" value={oneTimeDealPaidAmount} onChange={e => setOneTimeDealPaidAmount(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Дата оплаты</label>
+                        <input type="date" value={oneTimeDealPaidDate} onChange={e => setOneTimeDealPaidDate(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100"/>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Примечания</label>
+                        <textarea value={oneTimeDealNotes} onChange={e => setOneTimeDealNotes(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100" rows={2}/>
+                    </div>
+                    <div className="flex justify-between items-center pt-2">
+                        {editingOneTimeDeal && onDeleteOneTimeDeal && <button type="button" onClick={() => { if(confirm('Удалить сделку?')) onDeleteOneTimeDeal(editingOneTimeDeal.id); setIsOneTimeDealModalOpen(false); }} className="text-red-500 text-sm hover:underline">Удалить</button>}
+                        <div className="flex gap-2 ml-auto">
+                            <button type="button" onClick={() => setIsOneTimeDealModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#303030] rounded-lg">Отмена</button>
+                            <button type="submit" className="px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-sm">Сохранить</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+       )}
+
+       {/* AccountsReceivable Modal */}
+       {isReceivableModalOpen && onSaveAccountsReceivable && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end md:items-center justify-center z-[80] animate-in fade-in duration-200" onClick={(e) => { if (e.target === e.currentTarget) setIsReceivableModalOpen(false); }}>
+            <div className="bg-white dark:bg-[#252525] rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-[#333] flex flex-col max-h-[95vh] md:max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-gray-100 dark:border-[#333] bg-white dark:bg-[#252525] shrink-0 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-gray-800 dark:text-white">{editingReceivable ? 'Редактировать задолженность' : 'Новая задолженность'}</h2>
+                    <button onClick={() => setIsReceivableModalOpen(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleReceivableSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Клиент *</label>
+                        <TaskSelect
+                            value={receivableClientId}
+                            onChange={setReceivableClientId}
+                            options={clients.map(c => ({ value: c.id, label: c.name }))}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Разовая сделка</label>
+                            <TaskSelect
+                                value={receivableDealId}
+                                onChange={setReceivableDealId}
+                                options={[{ value: '', label: 'Не выбрано' }, ...oneTimeDeals.filter(d => d.clientId === receivableClientId).map(d => ({ value: d.id, label: `${d.number || 'Без номера'} - ${d.amount.toLocaleString()} UZS` }))]}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Договор</label>
+                            <TaskSelect
+                                value={receivableContractId}
+                                onChange={setReceivableContractId}
+                                options={[{ value: '', label: 'Не выбрано' }, ...contracts.filter(c => c.clientId === receivableClientId).map(c => ({ value: c.id, label: `${c.number} - ${c.amount.toLocaleString()} UZS` }))]}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Описание *</label>
+                        <textarea value={receivableDescription} onChange={e => setReceivableDescription(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100" rows={3} required/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Сумма задолженности (UZS) *</label>
+                            <input type="number" value={receivableAmount} onChange={e => setReceivableAmount(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" required/>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Срок погашения *</label>
+                            <input type="date" value={receivableDueDate} onChange={e => setReceivableDueDate(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100" required/>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Оплаченная сумма (UZS)</label>
+                            <input type="number" value={receivablePaidAmount} onChange={e => setReceivablePaidAmount(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"/>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Статус</label>
+                            <TaskSelect
+                                value={receivableStatus}
+                                onChange={(val) => setReceivableStatus(val as any)}
+                                options={[
+                                    { value: 'current', label: 'Текущая' },
+                                    { value: 'overdue', label: 'Просрочена' },
+                                    { value: 'paid', label: 'Оплачена' }
+                                ]}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Дата оплаты</label>
+                        <input type="date" value={receivablePaidDate} onChange={e => setReceivablePaidDate(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100"/>
+                    </div>
+                    <div className="flex justify-between items-center pt-2">
+                        {editingReceivable && onDeleteAccountsReceivable && <button type="button" onClick={() => { if(confirm('Удалить задолженность?')) onDeleteAccountsReceivable(editingReceivable.id); setIsReceivableModalOpen(false); }} className="text-red-500 text-sm hover:underline">Удалить</button>}
+                        <div className="flex gap-2 ml-auto">
+                            <button type="button" onClick={() => setIsReceivableModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#303030] rounded-lg">Отмена</button>
                             <button type="submit" className="px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-sm">Сохранить</button>
                         </div>
                     </div>

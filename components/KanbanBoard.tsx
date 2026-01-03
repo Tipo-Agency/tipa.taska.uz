@@ -29,6 +29,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onOpenTask
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const getTasksByStatus = (statusName: string) => {
     return tasks.filter(t => t.status === statusName);
@@ -94,17 +95,58 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const onDragStart = (e: React.DragEvent, taskId: string) => {
       setDraggedTaskId(taskId);
+      setIsDragging(true);
       e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', taskId);
+      // Делаем элемент полупрозрачным при перетаскивании
+      if (e.currentTarget instanceof HTMLElement) {
+          e.currentTarget.style.opacity = '0.5';
+      }
+  };
+
+  const onDragEnd = (e: React.DragEvent) => {
+      // Восстанавливаем прозрачность
+      if (e.currentTarget instanceof HTMLElement) {
+          e.currentTarget.style.opacity = '1';
+      }
+      // Небольшая задержка, чтобы onClick не сработал после drag
+      setTimeout(() => {
+          setIsDragging(false);
+          setDraggedTaskId(null);
+      }, 100);
   };
 
   const onDragOver = (e: React.DragEvent) => {
       e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // Добавляем визуальную обратную связь
+      if (e.currentTarget instanceof HTMLElement) {
+          e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+      }
+  };
+
+  const onDragLeave = (e: React.DragEvent) => {
+      // Убираем визуальную обратную связь
+      if (e.currentTarget instanceof HTMLElement) {
+          e.currentTarget.style.backgroundColor = '';
+      }
   };
 
   const onDrop = (e: React.DragEvent, newStatus: string) => {
       e.preventDefault();
-      if (draggedTaskId) {
-          onUpdateStatus(draggedTaskId, newStatus);
+      e.stopPropagation();
+      
+      // Убираем визуальную обратную связь
+      if (e.currentTarget instanceof HTMLElement) {
+          e.currentTarget.style.backgroundColor = '';
+      }
+      
+      const taskId = draggedTaskId || e.dataTransfer.getData('text/plain');
+      if (taskId) {
+          const task = tasks.find(t => t.id === taskId);
+          if (task && task.status !== newStatus) {
+              onUpdateStatus(taskId, newStatus);
+          }
           setDraggedTaskId(null);
       }
   };
@@ -121,6 +163,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       key={status.id} 
                       className="flex-shrink-0 w-80 flex flex-col rounded-lg p-2 bg-gray-100/80 dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#333] transition-colors max-h-full"
                       onDragOver={onDragOver}
+                      onDragLeave={onDragLeave}
                       onDrop={(e) => onDrop(e, status.name)}
                   >
                     <div className="flex items-center justify-between mb-3 px-2 pt-1 shrink-0">
@@ -148,10 +191,30 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           return (
                               <div 
                                   key={task.id} 
-                                  draggable
+                                  draggable={true}
                                   onDragStart={(e) => onDragStart(e, task.id)}
-                                  onClick={() => onOpenTask(task)}
-                                  className="bg-white dark:bg-[#2b2b2b] p-3 rounded-md shadow-sm border border-gray-200 dark:border-[#3a3a3a] hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all group relative cursor-grab active:cursor-grabbing"
+                                  onDragEnd={onDragEnd}
+                                  onMouseDown={(e) => {
+                                      // Запоминаем начальную позицию мыши
+                                      const startX = e.clientX;
+                                      const startY = e.clientY;
+                                      
+                                      const handleMouseUp = (upEvent: MouseEvent) => {
+                                          const endX = upEvent.clientX;
+                                          const endY = upEvent.clientY;
+                                          const distance = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                                          
+                                          // Если мышь переместилась меньше чем на 5px, считаем это кликом
+                                          if (distance < 5 && !isDragging) {
+                                              onOpenTask(task);
+                                          }
+                                          
+                                          document.removeEventListener('mouseup', handleMouseUp);
+                                      };
+                                      
+                                      document.addEventListener('mouseup', handleMouseUp);
+                                  }}
+                                  className="bg-white dark:bg-[#2b2b2b] p-3 rounded-md shadow-sm border border-gray-200 dark:border-[#3a3a3a] hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all group relative cursor-grab active:cursor-grabbing select-none"
                               >
                                   {/* Source Badge */}
                                   {source && (

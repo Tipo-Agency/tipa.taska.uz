@@ -109,7 +109,7 @@ export const firestoreService = {
       const collections = [
         'users', 'tasks', 'projects', 'tables', 'docs', 'folders',
         'meetings', 'contentPosts', 'activity', 'statuses', 'priorities',
-        'clients', 'contracts', 'employeeInfos', 'deals', 'notificationPrefs',
+        'clients', 'contracts', 'oneTimeDeals', 'accountsReceivable', 'employeeInfos', 'deals', 'notificationPrefs',
         'departments', 'financeCategories', 'financePlan', 'purchaseRequests',
         'orgPositions', 'businessProcesses', 'automationRules',
         'warehouses', 'inventoryItems', 'stockMovements'
@@ -153,7 +153,7 @@ export const firestoreService = {
       const collections = [
         'users', 'tasks', 'projects', 'tables', 'docs', 'folders',
         'meetings', 'contentPosts', 'activity', 'statuses', 'priorities',
-        'clients', 'contracts', 'employeeInfos', 'deals', 'notificationPrefs',
+        'clients', 'contracts', 'oneTimeDeals', 'accountsReceivable', 'employeeInfos', 'deals', 'notificationPrefs',
         'departments', 'financeCategories', 'financePlan', 'purchaseRequests',
         'financialPlanDocuments', 'financialPlannings',
         'orgPositions', 'businessProcesses', 'automationRules',

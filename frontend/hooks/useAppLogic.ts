@@ -40,6 +40,8 @@ export const useAppLogic = () => {
       taskSlice.setters.setPriorities(api.priorities.getAll());
       crmSlice.setters.setClients(api.clients.getAll());
       crmSlice.setters.setContracts(api.contracts.getAll());
+      crmSlice.setters.setOneTimeDeals(api.oneTimeDeals.getAll());
+      crmSlice.setters.setAccountsReceivable(api.accountsReceivable.getAll());
       crmSlice.setters.setEmployeeInfos(api.employees.getAll());
       crmSlice.setters.setDeals(api.deals.getAll());
       contentSlice.setters.setDocs(api.docs.getAll());
@@ -316,7 +318,7 @@ export const useAppLogic = () => {
       isLoading, notification,
       users: authSlice.state.users, currentUser: authSlice.state.currentUser, isProfileOpen: authSlice.state.isProfileOpen,
       tasks: taskSlice.state.tasks, projects: taskSlice.state.projects, statuses: taskSlice.state.statuses, priorities: taskSlice.state.priorities, isTaskModalOpen: taskSlice.state.isTaskModalOpen, editingTask: taskSlice.state.editingTask,
-      clients: crmSlice.state.clients, contracts: crmSlice.state.contracts, employeeInfos: crmSlice.state.employeeInfos, deals: crmSlice.state.deals,
+      clients: crmSlice.state.clients, contracts: crmSlice.state.contracts, oneTimeDeals: crmSlice.state.oneTimeDeals, accountsReceivable: crmSlice.state.accountsReceivable, employeeInfos: crmSlice.state.employeeInfos, deals: crmSlice.state.deals,
       docs: contentSlice.state.docs, folders: contentSlice.state.folders, meetings: contentSlice.state.meetings, contentPosts: contentSlice.state.contentPosts, isDocModalOpen: contentSlice.state.isDocModalOpen, activeDocId: contentSlice.state.activeDocId, targetFolderId: contentSlice.state.targetFolderId, editingDoc: contentSlice.state.editingDoc,
       departments: financeSlice.state.departments, financeCategories: financeSlice.state.financeCategories, financePlan: financeSlice.state.financePlan, purchaseRequests: financeSlice.state.purchaseRequests, financialPlanDocuments: financeSlice.state.financialPlanDocuments, financialPlannings: financeSlice.state.financialPlannings,
       orgPositions: bpmSlice.state.orgPositions, businessProcesses: bpmSlice.state.businessProcesses,
