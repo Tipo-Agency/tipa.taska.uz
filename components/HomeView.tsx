@@ -1,0 +1,294 @@
+
+import React, { useState, useEffect } from 'react';
+import { Task, User, ActivityLog, Meeting, FinancePlan, PurchaseRequest, Deal, ContentPost, Role, EmployeeInfo } from '../types';
+import { CheckCircle2, Clock, Calendar, ArrowRight, Wallet, TrendingUp, Instagram, AlertCircle, Briefcase, Zap, Plus, X } from 'lucide-react';
+
+interface HomeViewProps {
+  currentUser: User;
+  tasks: Task[];
+  recentActivity: ActivityLog[];
+  meetings?: Meeting[];
+  financePlan?: FinancePlan | null;
+  purchaseRequests?: PurchaseRequest[];
+  deals?: Deal[];
+  contentPosts?: ContentPost[];
+  employeeInfos?: EmployeeInfo[];
+  onOpenTask: (task: Task) => void;
+  onNavigateToInbox: () => void;
+  onQuickCreateTask: () => void;
+  onQuickCreateProcess: () => void;
+  onQuickCreateDeal: () => void;
+}
+
+interface ActionItem {
+    id: string;
+    type: 'task' | 'meeting' | 'request' | 'deal' | 'content';
+    title: string;
+    subtitle?: string;
+    time?: string;
+    priority?: 'high' | 'medium' | 'low';
+    status: string;
+    onClick?: () => void;
+}
+
+const HomeView: React.FC<HomeViewProps> = ({ 
+    currentUser, tasks, recentActivity, meetings = [], financePlan, purchaseRequests = [], deals = [], contentPosts = [],
+    employeeInfos = [], onOpenTask, onNavigateToInbox, onQuickCreateTask, onQuickCreateProcess, onQuickCreateDeal
+}) => {
+  const [showBirthdayModal, setShowBirthdayModal] = useState(false);
+  
+  // Приветствие в зависимости от времени суток (локальное время устройства)
+  const hour = new Date().getHours();
+  let greeting: string;
+  if (hour >= 6 && hour < 12) {
+    greeting = 'Доброе утро';
+  } else if (hour >= 12 && hour < 18) {
+    greeting = 'Добрый день';
+  } else if (hour >= 18 && hour < 23) {
+    greeting = 'Добрый вечер';
+  } else {
+    greeting = 'Доброй ночи';
+  }
+  
+  // Форматирование даты: "Понедельник, 29 декабря 2025"
+  const today = new Date();
+  const dayOfWeek = today.toLocaleDateString('ru-RU', { weekday: 'long' });
+  const dayOfMonth = today.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  const formattedDate = `${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dayOfMonth}`;
+  
+  const todayStr = today.toISOString().split('T')[0];
+  
+  // Проверка дня рождения (локальное время устройства)
+  useEffect(() => {
+    const employeeInfo = employeeInfos.find(e => e.userId === currentUser?.id);
+    if (employeeInfo?.birthDate) {
+      const birthDate = new Date(employeeInfo.birthDate);
+      const today = new Date();
+      const isBirthday = birthDate.getMonth() === today.getMonth() && birthDate.getDate() === today.getDate();
+      
+      if (isBirthday) {
+        // Проверяем, показывали ли уже сегодня (через localStorage)
+        const lastShown = localStorage.getItem(`birthday_${currentUser.id}_${todayStr}`);
+        if (!lastShown) {
+          setShowBirthdayModal(true);
+          localStorage.setItem(`birthday_${currentUser.id}_${todayStr}`, 'true');
+        }
+      }
+    }
+  }, [currentUser?.id, employeeInfos, todayStr]);
+
+  const actionItems: ActionItem[] = [];
+
+  if (currentUser?.role === Role.ADMIN) {
+      purchaseRequests.filter(r => r && r.status === 'pending').forEach(r => {
+          actionItems.push({ id: r.id, type: 'request', title: `Заявка: ${r.amount.toLocaleString()} UZS`, subtitle: r.description, priority: 'high', status: 'На согласовании', time: new Date(r.date).toLocaleDateString() });
+      });
+  }
+
+  // Задачи на сегодня - исключаем идеи и функции, архивные и выполненные
+  // Показываем все задачи на сегодня, не только назначенные на текущего пользователя
+  const todayTasks = (tasks || []).filter(t => 
+    t && 
+    t.entityType !== 'idea' && 
+    t.entityType !== 'feature' &&
+    !t.isArchived &&
+    !['Выполнено', 'Done', 'Завершено'].includes(t.status) && 
+    t.endDate && 
+    t.endDate === todayStr
+  );
+  
+  todayTasks.forEach(t => {
+    actionItems.push({ 
+      id: t.id, 
+      type: 'task', 
+      title: t.title, 
+      subtitle: t.projectId ? 'Проектная задача' : undefined, 
+      priority: t.priority === 'Высокий' ? 'high' : 'medium', 
+      status: t.status, 
+      time: 'Сегодня', 
+      onClick: () => onOpenTask(t) 
+    });
+  });
+
+  const todayMeetings = meetings.filter(m => m && m.date === todayStr && (m.participantIds?.includes(currentUser?.id) || !m.participantIds || m.participantIds.length === 0));
+  todayMeetings.forEach(m => {
+      actionItems.push({ id: m.id, type: 'meeting', title: `Встреча: ${m.title}`, subtitle: m.time, time: m.time, status: 'Запланировано', priority: 'medium' });
+  });
+
+  actionItems.sort((a, b) => { if (a.priority === 'high' && b.priority !== 'high') return -1; if (b.priority === 'high' && a.priority !== 'high') return 1; return 0; });
+
+  const totalRevenue = deals.filter(d => d.stage === 'won').reduce((sum, d) => sum + d.amount, 0); 
+  const planPercent = financePlan && financePlan.salesPlan > 0 ? Math.round((financePlan.currentIncome / financePlan.salesPlan) * 100) : 0;
+  const myDeals = deals.filter(d => d && d.assigneeId === currentUser?.id && d.stage !== 'won' && d.stage !== 'lost');
+
+  // Непрочитанные уведомления - показываем все непрочитанные, не только для текущего пользователя
+  const unreadNotifications = (recentActivity || []).filter(a => 
+    a && !a.read
+  );
+
+  // Проверка на наличие currentUser
+  if (!currentUser) {
+    return (
+      <div className="h-full flex items-center justify-center bg-white dark:bg-[#191919]">
+        <div className="p-10 text-center text-gray-500 dark:text-gray-400">Пользователь не найден</div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Модалка поздравления с днем рождения */}
+      {showBirthdayModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowBirthdayModal(false)}>
+          <div className="bg-white dark:bg-[#1e1e1e] rounded-xl p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-[#333] shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="text-6xl mb-4">🎉</div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Поздравляем с днем рождения, {currentUser?.name || 'Пользователь'}!
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Желаем успехов, здоровья и счастья!
+              </p>
+              <Button onClick={() => setShowBirthdayModal(false)}>
+                Закрыть
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto w-full px-6 pb-20 pt-8 h-full flex flex-col overflow-hidden bg-white dark:bg-[#191919]">
+        <div className="flex justify-between items-end mb-4 shrink-0">
+          <div>
+              <h1 className="text-xl font-bold text-gray-800 dark:text-white">{greeting}, {currentUser?.name || 'Пользователь'}</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Командный центр</p>
+          </div>
+          <div className="text-right hidden sm:block">
+              <div className="text-sm font-bold text-gray-800 dark:text-white">{formattedDate}</div>
+          </div>
+        </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-1 min-h-0">
+        <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 h-full min-h-0">
+            {/* УВЕДОМЛЕНИЯ */}
+            <div className="bg-white dark:bg-[#1e1e1e] rounded-xl border border-gray-200 dark:border-[#333] shadow-sm flex flex-col h-full overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-[#333] bg-gray-50/50 dark:bg-[#252525] flex justify-between items-center shrink-0">
+                    <h2 className="font-bold text-sm text-gray-800 dark:text-white flex items-center gap-2">
+                        <AlertCircle size={16} className="text-orange-500"/> Уведомления
+                    </h2>
+                    <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded-full">{unreadNotifications.length}</span>
+                </div>
+                <div className="overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    {unreadNotifications.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-gray-400">Нет непрочитанных уведомлений</div>
+                    ) : (
+                        <>
+                            {unreadNotifications.slice(0, 10).map(notification => (
+                                <div 
+                                    key={notification.id} 
+                                    onClick={onNavigateToInbox}
+                                    className="group p-2 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-[#444] hover:bg-gray-50 dark:hover:bg-[#2b2b2b] transition-all cursor-pointer flex items-center gap-3"
+                                >
+                                    <div className="p-1.5 rounded-md shrink-0 bg-gray-100 dark:bg-[#333]">
+                                        <img src={notification.userAvatar} alt={notification.userName} className="w-6 h-6 rounded-full object-cover object-center" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-baseline">
+                                            <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{notification.details}</h3>
+                                            <span className="text-[10px] text-gray-400">{new Date(notification.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{notification.action}</div>
+                                    </div>
+                                </div>
+                            ))}
+                            {unreadNotifications.length > 10 && (
+                                <button 
+                                    onClick={onNavigateToInbox}
+                                    className="w-full mt-2 p-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                >
+                                    Показать все ({unreadNotifications.length})
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* ЗАДАЧИ НА СЕГОДНЯ */}
+            <div className="bg-white dark:bg-[#1e1e1e] rounded-xl border border-gray-200 dark:border-[#333] shadow-sm p-4 flex flex-col h-full overflow-hidden">
+                <h3 className="font-bold text-sm text-gray-800 dark:text-white mb-4 flex items-center gap-2 shrink-0"><CheckCircle2 size={16} className="text-blue-500"/> Задачи на сегодня</h3>
+                <div className="space-y-2 overflow-y-auto custom-scrollbar">
+                    {todayTasks.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-gray-400">Нет задач на сегодня</div>
+                    ) : (
+                        todayTasks.map(task => {
+                            const priorityColor = task.priority === 'Высокий' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 
+                                                 task.priority === 'Средний' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' : 
+                                                 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+                            return (
+                                <div key={task.id} onClick={() => onOpenTask(task)} className="p-3 rounded-lg border border-gray-200 dark:border-[#333] hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all cursor-pointer">
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white flex-1">{task.title}</h4>
+                                        {task.priority && (
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${priorityColor}`}>
+                                                {task.priority}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                        <span>{task.status}</span>
+                                        {task.projectId && <span>• Проект</span>}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div className="space-y-4 h-full flex flex-col overflow-y-auto custom-scrollbar">
+            {/* QUICK ACTIONS */}
+            <div className="bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 shadow-sm p-4 shrink-0">
+                <div className="grid grid-cols-2 gap-2">
+                    <button onClick={onQuickCreateTask} className="p-3 bg-white dark:bg-[#252525] text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold hover:shadow-md transition-all flex flex-col items-center gap-1 shadow-sm border border-blue-100 dark:border-blue-900/30">
+                        <CheckCircle2 size={20}/> Задача
+                    </button>
+                    <button onClick={onQuickCreateDeal} className="p-3 bg-white dark:bg-[#252525] text-green-600 dark:text-green-400 rounded-lg text-xs font-bold hover:shadow-md transition-all flex flex-col items-center gap-1 shadow-sm border border-green-100 dark:border-green-900/30">
+                        <Briefcase size={20}/> Сделка
+                    </button>
+                    <button onClick={onQuickCreateProcess} className="p-3 bg-white dark:bg-[#252525] text-purple-600 dark:text-purple-400 rounded-lg text-xs font-bold hover:shadow-md transition-all flex flex-col items-center gap-1 shadow-sm border border-purple-100 dark:border-purple-900/30 col-span-2">
+                        <Zap size={20}/> Запустить процесс
+                    </button>
+                </div>
+            </div>
+
+            {/* FINANCE */}
+            {currentUser.role === Role.ADMIN && financePlan && (
+                <div className="bg-white dark:bg-[#252525] border border-gray-200 dark:border-[#333] rounded-xl p-4 shadow-sm shrink-0">
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="bg-gray-100 dark:bg-[#333] p-1.5 rounded-lg text-gray-500 dark:text-gray-400"><Wallet size={16}/></div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ФИНАНСЫ</span>
+                    </div>
+                    <div className="mb-2">
+                        <div className="text-xl font-bold text-gray-900 dark:text-white">{financePlan.currentIncome.toLocaleString()}</div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400">Текущий доход</div>
+                    </div>
+                    <div className="w-full bg-gray-100 dark:bg-[#333] h-1 rounded-full overflow-hidden mb-1">
+                        <div className="bg-blue-600 h-full rounded-full" style={{ width: `${Math.min(100, planPercent)}%` }}></div>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 dark:text-gray-400">
+                        <span>{planPercent}%</span>
+                        <span>План: {financePlan.salesPlan.toLocaleString()}</span>
+                    </div>
+                </div>
+            )}
+        </div>
+      </div>
+    </div>
+    </>
+  );
+};
+
+export default HomeView;
