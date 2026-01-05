@@ -1,10 +1,12 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../../backend/api';
 import { FAVICON_SVG_DATA_URI } from '../../components/AppIcons';
 import { storageService } from '../../services/storageService';
 import { pollTelegramUpdates, sendTelegramNotification, formatDealMessage, formatDealStatusChangeMessage, formatClientMessage, formatContractMessage, formatPurchaseRequestMessage, formatDocumentMessage, formatMeetingMessage } from '../../services/telegramService';
-import { Comment, Deal, Task, BusinessProcess, Client, Contract, PurchaseRequest, Doc, Meeting } from '../../types';
+import { leadSyncService } from '../../services/leadSyncService';
+import { Comment, Deal, Task, BusinessProcess, Client, Contract, PurchaseRequest, Doc, Meeting, SalesFunnel } from '../../types';
+import { createDeleteHandler } from '../../utils/crudUtils';
 
 import { useAuthLogic } from './slices/useAuthLogic';
 import { useTaskLogic } from './slices/useTaskLogic';
@@ -20,51 +22,178 @@ import { STANDARD_FEATURES } from '../../components/FunctionalityView';
 export const useAppLogic = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [notification, setNotification] = useState<string | null>(null);
+  // Отслеживание загруженных модулей для ленивой загрузки
+  const [loadedModules, setLoadedModules] = useState<Set<string>>(new Set());
+  const loadedModulesRef = useRef<Set<string>>(new Set());
 
   const showNotification = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(null), 3000); };
 
   const settingsSlice = useSettingsLogic(showNotification);
   const authSlice = useAuthLogic(showNotification);
   const crmSlice = useCRMLogic(showNotification);
+  const [salesFunnels, setSalesFunnels] = useState<SalesFunnel[]>([]);
   const contentSlice = useContentLogic(showNotification, settingsSlice.state.activeTableId);
   const taskSlice = useTaskLogic(showNotification, authSlice.state.currentUser, authSlice.state.users, settingsSlice.state.automationRules, contentSlice.state.docs, contentSlice.actions.saveDoc);
   const financeSlice = useFinanceLogic(showNotification);
   const bpmSlice = useBPMLogic(showNotification);
   const inventorySlice = useInventoryLogic(showNotification);
 
-  const refreshData = () => {
-      authSlice.setters.setUsers(api.users.getAll());
-      taskSlice.setters.setTasks(api.tasks.getAll());
-      taskSlice.setters.setProjects(api.projects.getAll());
-      taskSlice.setters.setStatuses(api.statuses.getAll());
-      taskSlice.setters.setPriorities(api.priorities.getAll());
-      crmSlice.setters.setClients(api.clients.getAll());
-      crmSlice.setters.setContracts(api.contracts.getAll());
-      crmSlice.setters.setOneTimeDeals(api.oneTimeDeals.getAll());
-      crmSlice.setters.setAccountsReceivable(api.accountsReceivable.getAll());
-      crmSlice.setters.setEmployeeInfos(api.employees.getAll());
-      crmSlice.setters.setDeals(api.deals.getAll());
-      contentSlice.setters.setDocs(api.docs.getAll());
-      contentSlice.setters.setFolders(api.folders.getAll());
-      contentSlice.setters.setMeetings(api.meetings.getAll());
-      contentSlice.setters.setContentPosts(api.contentPosts.getAll());
-      settingsSlice.setters.setTables(api.tables.getAll());
-      settingsSlice.setters.setActivityLogs(api.activity.getAll());
-      settingsSlice.setters.setNotificationPrefs(api.notificationPrefs.get());
-      settingsSlice.setters.setAutomationRules(api.automation.getRules());
-      financeSlice.setters.setDepartments(api.departments.getAll());
-      financeSlice.setters.setFinanceCategories(api.finance.getCategories());
-      financeSlice.setters.setFinancePlan(api.finance.getPlan());
-      financeSlice.setters.setPurchaseRequests(api.finance.getRequests());
-      financeSlice.setters.setFinancialPlanDocuments(api.finance.getFinancialPlanDocuments());
-      financeSlice.setters.setFinancialPlannings(api.finance.getFinancialPlannings());
-      bpmSlice.setters.setOrgPositions(api.bpm.getPositions());
-      bpmSlice.setters.setBusinessProcesses(api.bpm.getProcesses());
-      inventorySlice.setters.setWarehouses(api.inventory.getWarehouses());
-      inventorySlice.setters.setItems(api.inventory.getItems());
-      inventorySlice.setters.setMovements(api.inventory.getMovements());
+  // Базовая загрузка - только критически важные данные для работы приложения
+  // Уровень 0: Загрузка данных для аутентификации (только users)
+  const loadAuthData = async () => {
+      const users = await api.users.getAll();
+      if (users.length !== authSlice.state.users.length || 
+          users.some(u => !authSlice.state.users.find(au => au.id === u.id))) {
+        authSlice.actions.updateUsers(users);
+      } else {
+        authSlice.setters.setUsers(users);
+      }
   };
 
+  // Уровень 1: Загрузка основных данных верхнего уровня (после аутентификации)
+  const loadMainData = async () => {
+      // Загружаем параллельно для скорости
+      const [tables, activityLogs, notificationPrefs, automationRules, statuses, priorities, funnels] = await Promise.all([
+          api.tables.getAll(),
+          api.activity.getAll(),
+          api.notificationPrefs.get(),
+          api.automation.getRules(),
+          api.statuses.getAll(),
+          api.priorities.getAll(),
+          api.funnels.getAll(),
+      ]);
+      
+      settingsSlice.setters.setTables(tables);
+      settingsSlice.setters.setActivityLogs(activityLogs);
+      settingsSlice.setters.setNotificationPrefs(notificationPrefs);
+      settingsSlice.setters.setAutomationRules(automationRules);
+      taskSlice.setters.setStatuses(statuses);
+      taskSlice.setters.setPriorities(priorities);
+      setSalesFunnels(funnels);
+  };
+
+  // Уровень 2: Загрузка данных модуля Tasks (lazy loading)
+  const loadTasksData = async () => {
+      if (loadedModulesRef.current.has('tasks')) return; // Уже загружено
+      const [tasks, projects] = await Promise.all([
+          api.tasks.getAll(),
+          api.projects.getAll(),
+      ]);
+      taskSlice.setters.setTasks(tasks);
+      taskSlice.setters.setProjects(projects);
+      loadedModulesRef.current.add('tasks');
+      setLoadedModules(new Set(loadedModulesRef.current));
+  };
+
+  // Уровень 2: Загрузка данных модуля CRM (lazy loading)
+  const loadCRMData = async () => {
+      if (loadedModulesRef.current.has('crm')) return; // Уже загружено
+      const [clients, deals, accountsReceivable, employees] = await Promise.all([
+          api.clients.getAll(),
+          api.deals.getAll(), // Объединенная коллекция для договоров и продаж
+          api.accountsReceivable.getAll(),
+          api.employees.getAll(),
+      ]);
+      crmSlice.setters.setClients(clients);
+      crmSlice.setters.setDeals(deals); // Устанавливаем все сделки (договоры и продажи)
+      crmSlice.setters.setAccountsReceivable(accountsReceivable);
+      crmSlice.setters.setEmployeeInfos(employees);
+      loadedModulesRef.current.add('crm');
+      setLoadedModules(new Set(loadedModulesRef.current));
+  };
+
+  // Уровень 2: Загрузка данных модуля Content (lazy loading)
+  const loadContentData = async () => {
+      if (loadedModulesRef.current.has('content')) return; // Уже загружено
+      const [docs, folders, meetings, contentPosts] = await Promise.all([
+          api.docs.getAll(),
+          api.folders.getAll(),
+          api.meetings.getAll(),
+          api.contentPosts.getAll(),
+      ]);
+      // Не фильтруем архивные элементы - они нужны для архива, фильтрация происходит в компонентах
+      contentSlice.setters.setDocs(docs);
+      contentSlice.setters.setFolders(folders);
+      contentSlice.setters.setMeetings(meetings);
+      contentSlice.setters.setContentPosts(contentPosts);
+      loadedModulesRef.current.add('content');
+      setLoadedModules(new Set(loadedModulesRef.current));
+  };
+
+  // Уровень 2: Загрузка данных модуля Finance (lazy loading)
+  const loadFinanceData = async () => {
+      if (loadedModulesRef.current.has('finance')) return; // Уже загружено
+      const [departments, categories, plan, requests, planDocs, plannings] = await Promise.all([
+          api.departments.getAll(),
+          api.finance.getCategories(),
+          api.finance.getPlan(),
+          api.finance.getRequests(),
+          api.finance.getFinancialPlanDocuments(),
+          api.finance.getFinancialPlannings(),
+      ]);
+      financeSlice.setters.setDepartments(departments);
+      financeSlice.setters.setFinanceCategories(categories);
+      financeSlice.setters.setFinancePlan(plan);
+      financeSlice.setters.setPurchaseRequests(requests);
+      financeSlice.setters.setFinancialPlanDocuments(planDocs);
+      financeSlice.setters.setFinancialPlannings(plannings);
+      loadedModulesRef.current.add('finance');
+      setLoadedModules(new Set(loadedModulesRef.current));
+  };
+
+  // Уровень 2: Загрузка данных модуля BPM (lazy loading)
+  const loadBPMData = async () => {
+      if (loadedModulesRef.current.has('bpm')) return; // Уже загружено
+      const [positions, processes] = await Promise.all([
+          api.bpm.getPositions(),
+          api.bpm.getProcesses(),
+      ]);
+      bpmSlice.setters.setOrgPositions(positions);
+      bpmSlice.setters.setBusinessProcesses(processes);
+      loadedModulesRef.current.add('bpm');
+      setLoadedModules(new Set(loadedModulesRef.current));
+  };
+
+  // Уровень 2: Загрузка данных модуля Inventory (lazy loading)
+  const loadInventoryData = async () => {
+      if (loadedModulesRef.current.has('inventory')) return; // Уже загружено
+      const [warehouses, items, movements] = await Promise.all([
+          api.inventory.getWarehouses(),
+          api.inventory.getItems(),
+          api.inventory.getMovements(),
+      ]);
+      inventorySlice.setters.setWarehouses(warehouses);
+      inventorySlice.setters.setItems(items);
+      inventorySlice.setters.setMovements(movements);
+      loadedModulesRef.current.add('inventory');
+      setLoadedModules(new Set(loadedModulesRef.current));
+  };
+
+  // Обновление данных модуля (перезагрузка из Firebase)
+  const refreshModuleData = async (module: string) => {
+      switch (module) {
+          case 'tasks':
+              await loadTasksData();
+              break;
+          case 'crm':
+              await loadCRMData();
+              break;
+          case 'content':
+              await loadContentData();
+              break;
+          case 'finance':
+              await loadFinanceData();
+              break;
+          case 'bpm':
+              await loadBPMData();
+              break;
+          case 'inventory':
+              await loadInventoryData();
+              break;
+      }
+  };
+
+  // Инициализация приложения - поэтапная загрузка
   useEffect(() => {
     const faviconLink = document.getElementById('dynamic-favicon') as HTMLLinkElement;
     if (faviconLink) faviconLink.href = FAVICON_SVG_DATA_URI;
@@ -72,34 +201,30 @@ export const useAppLogic = () => {
     const initApp = async () => { 
       setIsLoading(true); 
       
-      // Сначала показываем данные из localStorage (быстрый старт)
-      refreshData();
-      setIsLoading(false);
-      
-      // Синхронизируем с Firebase в фоне (не блокирует загрузку)
-      // force=true означает, что это первая загрузка и нужно приоритет отдать облаку
-      api.sync(true).then((hasChanges) => {
-        if (hasChanges) {
-          refreshData();
-        }
-      }).catch(err => {
-        // Ошибка синхронизации с Firebase - продолжаем работать с локальными данными
-        console.warn('Ошибка синхронизации с Firebase:', err);
-      });
-      
-      // Удален скрипт автоматического создания пользователя Донских Александр
+      try {
+        // Уровень 0: Загружаем только данные для аутентификации
+        await loadAuthData();
+        setIsLoading(false);
+        
+        // Уровень 1: После загрузки auth данных, загружаем основные данные
+        // Загружаем всегда, так как основные данные нужны для работы приложения
+        await loadMainData();
+      } catch (err) {
+        console.error('Ошибка загрузки данных из Firebase:', err);
+        showNotification('Ошибка загрузки данных. Проверьте подключение к интернету.');
+        setIsLoading(false);
+      }
     };
     initApp();
-    // Синхронизация каждые 5 секунд (увеличено, чтобы дать время на сохранение)
-    // force=false - обычная синхронизация, приоритет более свежим данным
-    const syncInterval = setInterval(async () => { 
-        const hasChanges = await api.sync(false);
-        if (hasChanges) {
-            refreshData();
-        }
-    }, 5000);
+  }, []);
+
+  // УБРАНО: Синхронизация больше не нужна, так как все данные в Firebase
+  // Данные загружаются по требованию и обновляются после каждого сохранения
+
+  // Telegram polling для CRM модуля
+  useEffect(() => {
+    if (!loadedModulesRef.current.has('crm')) return; // Работает только если CRM модуль загружен
     
-    return () => clearInterval(syncInterval);
     const tgPollInterval = setInterval(async () => {
         // Only run polling if enabled in settings
         if (!storageService.getEnableTelegramImport()) return;
@@ -108,16 +233,16 @@ export const useAppLogic = () => {
         if (updates.newDeals.length > 0 || updates.newMessages.length > 0) {
             // Merge new deals
             if (updates.newDeals.length > 0) {
-                const currentDeals = api.deals.getAll(); // get fresh
+                const currentDeals = await api.deals.getAll(); // get fresh
                 const mergedDeals = [...currentDeals, ...updates.newDeals];
                 crmSlice.setters.setDeals(mergedDeals);
-                api.deals.updateAll(mergedDeals);
+                await api.deals.updateAll(mergedDeals);
                 showNotification(`Новых лидов из Telegram: ${updates.newDeals.length}`);
             }
             
             // Merge messages
             if (updates.newMessages.length > 0) {
-                const currentDeals = api.deals.getAll();
+                const currentDeals = await api.deals.getAll();
                 const updatedDeals = currentDeals.map(d => {
                     const msgs = updates.newMessages.filter(m => m.dealId === d.id);
                     if (msgs.length > 0) {
@@ -133,14 +258,112 @@ export const useAppLogic = () => {
                     return d;
                 });
                 crmSlice.setters.setDeals(updatedDeals);
-                api.deals.updateAll(updatedDeals);
+                await api.deals.updateAll(updatedDeals);
                 showNotification(`Новых сообщений: ${updates.newMessages.length}`);
             }
         }
     }, 10000);
 
-    return () => { clearInterval(syncInterval); clearInterval(tgPollInterval); };
-  }, []);
+    return () => clearInterval(tgPollInterval);
+  }, [loadedModules]);
+
+  // Instagram синхронизация для воронок с подключенным Instagram
+  useEffect(() => {
+    if (!loadedModulesRef.current.has('crm')) return; // Работает только если CRM модуль загружен
+    
+    const instagramSyncInterval = setInterval(async () => {
+      try {
+        const result = await leadSyncService.syncAllInstagramFunnels();
+        
+        // Сохраняем новые сделки
+        if (result.newDeals.length > 0) {
+          const currentDeals = await api.deals.getAll();
+          const mergedDeals = [...currentDeals, ...result.newDeals];
+          crmSlice.setters.setDeals(mergedDeals);
+          await api.deals.updateAll(mergedDeals);
+          showNotification(`Новых лидов из Instagram: ${result.newDeals.length}`);
+        }
+        
+        // Обновляем существующие сделки
+        if (result.updatedDeals.length > 0) {
+          const currentDeals = await api.deals.getAll();
+          const updatedDealsMap = new Map(result.updatedDeals.map(d => [d.id, d]));
+          const mergedDeals = currentDeals.map(d => updatedDealsMap.get(d.id) || d);
+          crmSlice.setters.setDeals(mergedDeals);
+          await api.deals.updateAll(mergedDeals);
+          showNotification(`Обновлено сделок из Instagram: ${result.updatedDeals.length}`);
+        }
+        
+        // Показываем ошибки, если есть
+        if (result.errors.length > 0) {
+          console.warn('Instagram sync errors:', result.errors);
+        }
+      } catch (error) {
+        console.error('Error syncing Instagram leads:', error);
+      }
+    }, 60000); // Синхронизация каждую минуту (Instagram API имеет лимиты)
+
+    return () => clearInterval(instagramSyncInterval);
+  }, [loadedModules]); // Зависимость от loadedModules для пересоздания эффекта при загрузке CRM
+
+  // Ленивая загрузка данных при открытии разделов (Уровень 2)
+  useEffect(() => {
+    const currentView = settingsSlice.state.currentView;
+    
+    // Определяем, какие данные нужно загрузить в зависимости от текущего представления
+    const loadData = async () => {
+      switch (currentView) {
+          case 'home':
+              // Home использует данные из нескольких модулей
+              await Promise.all([
+                  loadTasksData(),
+                  loadContentData(), // для meetings и contentPosts
+                  loadFinanceData(), // для financePlan и purchaseRequests
+                  loadCRMData(), // для deals и employeeInfos
+              ]);
+              break;
+          case 'tasks':
+          case 'table':
+          case 'search':
+          case 'analytics':
+          case 'spaces':
+              await loadTasksData();
+              if (currentView === 'analytics') {
+                  await loadCRMData(); // для deals и contracts в аналитике
+              }
+              break;
+          case 'sales-funnel':
+          case 'clients':
+              await Promise.all([
+                  loadTasksData(), // Tasks нужны для CRM модуля
+                  loadCRMData(),
+              ]);
+              break;
+          case 'finance':
+              await loadFinanceData();
+              break;
+          case 'employees':
+          case 'business-processes':
+              await Promise.all([
+                  loadTasksData(), // Tasks нужны для HR модуля
+                  loadBPMData(),
+                  loadCRMData(), // EmployeeInfos находятся в CRM
+              ]);
+              break;
+          case 'meetings':
+          case 'docs':
+              await loadContentData();
+              break;
+          case 'inventory':
+              await loadInventoryData();
+              break;
+      }
+    };
+    
+    loadData().catch(err => {
+      console.error('Ошибка загрузки данных модуля:', err);
+    });
+  }, [settingsSlice.state.currentView]);
 
   const saveDocWrapper = (docData: any) => {
       // Для документов не требуется tableId - находим системную таблицу docs или используем пустую строку
@@ -155,8 +378,10 @@ export const useAppLogic = () => {
           if (!existing && settingsSlice.state.notificationPrefs?.docCreated?.telegram && authSlice.state.currentUser) {
             sendTelegramNotification(formatDocumentMessage(newDoc.title, authSlice.state.currentUser.name)).catch(() => {});
           }
-          // Обновляем данные после сохранения
-          refreshData();
+          // Обновляем данные модуля после сохранения
+          if (loadedModulesRef.current.has('content')) {
+              refreshModuleData('content').catch(err => console.error('Ошибка обновления данных модуля:', err));
+          }
           if (docData.type === 'internal') { 
               contentSlice.setters.setActiveDocId(newDoc.id); 
               settingsSlice.setters.setCurrentView('doc-editor'); 
@@ -328,6 +553,7 @@ export const useAppLogic = () => {
       departments: financeSlice.state.departments, financeCategories: financeSlice.state.financeCategories, financePlan: financeSlice.state.financePlan, purchaseRequests: financeSlice.state.purchaseRequests, financialPlanDocuments: financeSlice.state.financialPlanDocuments, financialPlannings: financeSlice.state.financialPlannings,
       orgPositions: bpmSlice.state.orgPositions, businessProcesses: bpmSlice.state.businessProcesses,
       warehouses: inventorySlice.state.warehouses, inventoryItems: inventorySlice.state.items, inventoryMovements: inventorySlice.state.movements, inventoryBalances: inventorySlice.state.balances,
+      salesFunnels: salesFunnels,
       darkMode: settingsSlice.state.darkMode, tables: settingsSlice.state.tables, activityLogs: settingsSlice.state.activityLogs, currentView: settingsSlice.state.currentView, activeTableId: settingsSlice.state.activeTableId, viewMode: settingsSlice.state.viewMode, searchQuery: settingsSlice.state.searchQuery, settingsActiveTab: settingsSlice.state.settingsActiveTab, isCreateTableModalOpen: settingsSlice.state.isCreateTableModalOpen, createTableType: settingsSlice.state.createTableType, isEditTableModalOpen: settingsSlice.state.isEditTableModalOpen, editingTable: settingsSlice.state.editingTable, notificationPrefs: settingsSlice.state.notificationPrefs, automationRules: settingsSlice.state.automationRules, activeSpaceTab: settingsSlice.state.activeSpaceTab, telegramBotToken: storageService.getEmployeeBotToken() || '',
       activeTable: settingsSlice.state.tables.find(t => t.id === settingsSlice.state.activeTableId), activeDoc: contentSlice.state.docs.find(d => d.id === contentSlice.state.activeDocId)
     },
@@ -376,6 +602,7 @@ export const useAppLogic = () => {
           sendTelegramNotification(formatMeetingMessage(meeting.title, meeting.date, meeting.time, authSlice.state.currentUser.name)).catch(() => {});
         }
       },
+      deleteMeeting: contentSlice.actions.deleteMeeting,
       updateMeetingSummary: contentSlice.actions.updateMeetingSummary,
       savePost: contentSlice.actions.savePost,
       deletePost: contentSlice.actions.deletePost,
@@ -399,6 +626,253 @@ export const useAppLogic = () => {
       deletePurchaseRequest: financeSlice.actions.deletePurchaseRequest, saveFinancialPlanDocument: financeSlice.actions.saveFinancialPlanDocument, deleteFinancialPlanDocument: financeSlice.actions.deleteFinancialPlanDocument, saveFinancialPlanning: financeSlice.actions.saveFinancialPlanning, deleteFinancialPlanning: financeSlice.actions.deleteFinancialPlanning,
       saveWarehouse: inventorySlice.actions.saveWarehouse, deleteWarehouse: inventorySlice.actions.deleteWarehouse, saveInventoryItem: inventorySlice.actions.saveItem, deleteInventoryItem: inventorySlice.actions.deleteItem, createInventoryMovement: inventorySlice.actions.createMovement,
       savePosition: bpmSlice.actions.savePosition, deletePosition: bpmSlice.actions.deletePosition, saveProcess: bpmSlice.actions.saveProcess, deleteProcess: bpmSlice.actions.deleteProcess,
+      saveSalesFunnel: async (funnel: SalesFunnel) => {
+          try {
+              // Проверяем, существует ли воронка с таким id
+              const existingFunnels = await api.funnels.getAll();
+              const exists = existingFunnels.some(f => f.id === funnel.id);
+              
+              if (exists) {
+                  // Обновляем существующую воронку
+                  await api.funnels.update(funnel.id, funnel);
+              } else {
+                  // Создаем новую воронку (без id)
+                  const { id, ...funnelWithoutId } = funnel;
+                  await api.funnels.create(funnelWithoutId);
+              }
+              // После сохранения загружаем обновленные данные из Firebase
+              const funnels = await api.funnels.getAll();
+              setSalesFunnels(funnels);
+              showNotification('Воронка сохранена');
+          } catch (error) {
+              console.error('Ошибка сохранения воронки:', error);
+              showNotification('Ошибка сохранения воронки');
+          }
+      },
+      deleteSalesFunnel: async (id: string) => {
+          try {
+              await api.funnels.delete(id);
+              // После удаления загружаем обновленные данные из Firebase
+              const funnels = await api.funnels.getAll();
+              setSalesFunnels(funnels);
+              showNotification('Воронка удалена');
+          } catch (error) {
+              console.error('Ошибка удаления воронки:', error);
+              showNotification('Ошибка удаления воронки');
+          }
+      },
+      restoreUser: async (userId: string) => {
+          try {
+              const allUsers = await api.users.getAll();
+              const user = allUsers.find(u => u.id === userId);
+              if (!user) return;
+              const now = new Date().toISOString();
+              const updated = allUsers.map(u => u.id === userId ? { ...u, isArchived: false, updatedAt: now } : u);
+              await api.users.updateAll(updated);
+              // Обновляем локальное состояние
+              authSlice.actions.updateUsers(updated);
+              showNotification('Пользователь восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления пользователя:', error);
+              showNotification('Ошибка восстановления пользователя');
+          }
+      },
+      restoreDoc: async (docId: string) => {
+          try {
+              const allDocs = await api.docs.getAll();
+              const doc = allDocs.find(d => d.id === docId);
+              if (!doc) return;
+              const now = new Date().toISOString();
+              const updated = allDocs.map(d => d.id === docId ? { ...d, isArchived: false, updatedAt: now } : d);
+              await api.docs.updateAll(updated);
+              // Обновляем локальное состояние
+              contentSlice.setters.setDocs(updated);
+              showNotification('Документ восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления документа:', error);
+              showNotification('Ошибка восстановления документа');
+          }
+      },
+      restorePost: async (postId: string) => {
+          try {
+              const allPosts = await api.contentPosts.getAll();
+              const post = allPosts.find(p => p.id === postId);
+              if (!post) return;
+              const now = new Date().toISOString();
+              const updated = allPosts.map(p => p.id === postId ? { ...p, isArchived: false, updatedAt: now } : p);
+              await api.contentPosts.updateAll(updated);
+              contentSlice.setters.setContentPosts(updated);
+              showNotification('Пост восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления поста:', error);
+              showNotification('Ошибка восстановления поста');
+          }
+      },
+      restoreEmployee: async (employeeId: string) => {
+          try {
+              const allEmployees = await api.employees.getAll();
+              const employee = allEmployees.find(e => e.id === employeeId);
+              if (!employee) return;
+              const now = new Date().toISOString();
+              const updated = allEmployees.map(e => e.id === employeeId ? { ...e, isArchived: false, updatedAt: now } : e);
+              await api.employees.updateAll(updated);
+              crmSlice.setters.setEmployeeInfos(updated);
+              showNotification('Сотрудник восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления сотрудника:', error);
+              showNotification('Ошибка восстановления сотрудника');
+          }
+      },
+      restoreProject: async (projectId: string) => {
+          try {
+              const allProjects = await api.projects.getAll();
+              const project = allProjects.find(p => p.id === projectId);
+              if (!project) return;
+              const now = new Date().toISOString();
+              const updated = allProjects.map(p => p.id === projectId ? { ...p, isArchived: false, updatedAt: now } : p);
+              await api.projects.updateAll(updated);
+              taskSlice.actions.updateProjects(updated);
+              showNotification('Проект восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления проекта:', error);
+              showNotification('Ошибка восстановления проекта');
+          }
+      },
+      restoreDepartment: async (departmentId: string) => {
+          try {
+              const allDepartments = await api.departments.getAll();
+              const department = allDepartments.find(d => d.id === departmentId);
+              if (!department) return;
+              const now = new Date().toISOString();
+              const updated = allDepartments.map(d => d.id === departmentId ? { ...d, isArchived: false, updatedAt: now } : d);
+              await api.departments.updateAll(updated);
+              financeSlice.setters.setDepartments(updated);
+              showNotification('Подразделение восстановлено');
+          } catch (error) {
+              console.error('Ошибка восстановления подразделения:', error);
+              showNotification('Ошибка восстановления подразделения');
+          }
+      },
+      restoreFinanceCategory: async (categoryId: string) => {
+          try {
+              const allCategories = await api.finance.getCategories();
+              const category = allCategories.find(c => c.id === categoryId);
+              if (!category) return;
+              const now = new Date().toISOString();
+              const updated = allCategories.map(c => c.id === categoryId ? { ...c, isArchived: false, updatedAt: now } : c);
+              await api.finance.updateCategories(updated);
+              financeSlice.setters.setFinanceCategories(updated);
+              showNotification('Статья расходов восстановлена');
+          } catch (error) {
+              console.error('Ошибка восстановления статьи расходов:', error);
+              showNotification('Ошибка восстановления статьи расходов');
+          }
+      },
+      restoreSalesFunnel: async (funnelId: string) => {
+          try {
+              const allFunnels = await api.funnels.getAll();
+              const funnel = allFunnels.find(f => f.id === funnelId);
+              if (!funnel) return;
+              const now = new Date().toISOString();
+              const updated = allFunnels.map(f => f.id === funnelId ? { ...f, isArchived: false, updatedAt: now } : f);
+              await Promise.all(updated.map(f => api.funnels.update(f.id, f)));
+              setSalesFunnels(updated);
+              showNotification('Воронка восстановлена');
+          } catch (error) {
+              console.error('Ошибка восстановления воронки:', error);
+              showNotification('Ошибка восстановления воронки');
+          }
+      },
+      restoreTable: async (tableId: string) => {
+          try {
+              const allTables = await api.tables.getAll();
+              const table = allTables.find(t => t.id === tableId);
+              if (!table) return;
+              const now = new Date().toISOString();
+              const updated = allTables.map(t => t.id === tableId ? { ...t, isArchived: false, updatedAt: now } : t);
+              await api.tables.updateAll(updated);
+              settingsSlice.setters.setTables(updated);
+              showNotification('Таблица восстановлена');
+          } catch (error) {
+              console.error('Ошибка восстановления таблицы:', error);
+              showNotification('Ошибка восстановления таблицы');
+          }
+      },
+      restoreBusinessProcess: async (processId: string) => {
+          try {
+              const allProcesses = await api.bpm.getProcesses();
+              const process = allProcesses.find(p => p.id === processId);
+              if (!process) return;
+              const now = new Date().toISOString();
+              const updated = allProcesses.map(p => p.id === processId ? { ...p, isArchived: false, updatedAt: now } : p);
+              await api.bpm.updateProcesses(updated);
+              bpmSlice.setters.setBusinessProcesses(updated);
+              showNotification('Бизнес-процесс восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления бизнес-процесса:', error);
+              showNotification('Ошибка восстановления бизнес-процесса');
+          }
+      },
+      restoreDeal: async (dealId: string) => {
+          try {
+              const allDeals = await api.deals.getAll();
+              const deal = allDeals.find(d => d.id === dealId);
+              if (!deal) return;
+              const now = new Date().toISOString();
+              const updated = allDeals.map(d => d.id === dealId ? { ...d, isArchived: false, updatedAt: now } : d);
+              await api.deals.updateAll(updated);
+              crmSlice.setters.setDeals(updated);
+              showNotification('Сделка восстановлена');
+          } catch (error) {
+              console.error('Ошибка восстановления сделки:', error);
+              showNotification('Ошибка восстановления сделки');
+          }
+      },
+      restoreClient: async (clientId: string) => {
+          try {
+              const allClients = await api.clients.getAll();
+              const client = allClients.find(c => c.id === clientId);
+              if (!client) return;
+              const now = new Date().toISOString();
+              const updated = allClients.map(c => c.id === clientId ? { ...c, isArchived: false, updatedAt: now } : c);
+              await api.clients.updateAll(updated);
+              crmSlice.setters.setClients(updated);
+              showNotification('Клиент восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления клиента:', error);
+              showNotification('Ошибка восстановления клиента');
+          }
+      },
+      restoreContract: async (contractId: string) => {
+          try {
+              const allDeals = await api.deals.getAll();
+              const deal = allDeals.find(d => d.id === contractId && d.recurring === true);
+              if (!deal) return;
+              const now = new Date().toISOString();
+              const updated = allDeals.map(d => d.id === contractId ? { ...d, isArchived: false, updatedAt: now } : d);
+              await api.deals.updateAll(updated);
+              crmSlice.setters.setDeals(updated);
+              showNotification('Договор восстановлен');
+          } catch (error) {
+              console.error('Ошибка восстановления договора:', error);
+              showNotification('Ошибка восстановления договора');
+          }
+      },
+      restoreMeeting: async (meetingId: string) => {
+          try {
+              const allMeetings = await api.meetings.getAll();
+              const meeting = allMeetings.find(m => m.id === meetingId);
+              if (!meeting) return;
+              const now = new Date().toISOString();
+              const updated = allMeetings.map(m => m.id === meetingId ? { ...m, isArchived: false, updatedAt: now } : m);
+              await api.meetings.updateAll(updated);
+              contentSlice.setters.setMeetings(updated);
+              showNotification('Встреча восстановлена');
+          } catch (error) {
+              console.error('Ошибка восстановления встречи:', error);
+              showNotification('Ошибка восстановления встречи');
+          }
+      },
       toggleDarkMode: settingsSlice.actions.toggleDarkMode, createTable: createTableWrapper, updateTable: settingsSlice.actions.updateTable, deleteTable: settingsSlice.actions.deleteTable, markAllRead: settingsSlice.actions.markAllRead, navigate: settingsSlice.actions.navigate, openSettings: settingsSlice.actions.openSettings, closeSettings: settingsSlice.actions.closeSettings, openCreateTable: settingsSlice.actions.openCreateTable, closeCreateTable: settingsSlice.actions.closeCreateTable, openEditTable: settingsSlice.actions.openEditTable, closeEditTable: settingsSlice.actions.closeEditTable, updateNotificationPrefs: settingsSlice.actions.updateNotificationPrefs, saveAutomationRule: settingsSlice.actions.saveAutomationRule, deleteAutomationRule: settingsSlice.actions.deleteAutomationRule, setActiveSpaceTab: settingsSlice.actions.setActiveSpaceTab, onUpdateTelegramBotToken: (token: string) => { storageService.setEmployeeBotToken(token); },
       setActiveTableId: settingsSlice.setters.setActiveTableId, setCurrentView: settingsSlice.setters.setCurrentView, setViewMode: settingsSlice.setters.setViewMode, setSearchQuery: settingsSlice.setters.setSearchQuery,
       // Функция fillMockData полностью удалена

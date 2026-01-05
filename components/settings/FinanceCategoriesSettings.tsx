@@ -80,8 +80,8 @@ const FinanceCategoriesSettings: React.FC<FinanceCategoriesSettingsProps> = ({ c
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-[#333]">
-                        {categories.length > 0 ? (
-                            categories.map(cat => (
+                        {categories.filter(cat => !cat.isArchived).length > 0 ? (
+                            categories.filter(cat => !cat.isArchived).map(cat => (
                                 <tr key={cat.id} className="hover:bg-gray-50 dark:hover:bg-[#303030]">
                                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{cat.name}</td>
                                     <td className="px-4 py-3">

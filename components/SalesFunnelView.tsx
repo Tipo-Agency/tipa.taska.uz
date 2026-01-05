@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
-import { Deal, Client, User, Comment, Task, Project } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Deal, Client, User, Comment, Task, Project, SalesFunnel } from '../types';
 import { Plus, KanbanSquare, List as ListIcon, X, Send, MessageSquare, Instagram, Globe, UserPlus, Bot, Edit2, TrendingUp, CheckSquare, CheckCircle2, XCircle } from 'lucide-react';
 import { sendClientMessage } from '../services/telegramService';
+import { instagramService } from '../services/instagramService';
 import { DynamicIcon } from './AppIcons';
 import { TaskSelect } from './TaskSelect';
 import { Button } from './ui';
@@ -13,11 +14,13 @@ interface SalesFunnelViewProps {
   users: User[];
   projects?: Project[];
   tasks?: Task[];
+  salesFunnels?: SalesFunnel[];
   onSaveDeal: (deal: Deal) => void;
   onDeleteDeal: (id: string) => void;
   onCreateTask?: (task: Partial<Task>) => void;
   onCreateClient?: (client: Client) => void;
   onOpenTask?: (task: Task) => void;
+  onOpenSettings?: () => void; // Переход в настройки для создания воронки
   autoOpenCreateModal?: boolean; // Автоматически открыть модалку создания
 }
 
@@ -28,7 +31,7 @@ const STAGES = [
     { id: 'negotiation', label: 'Переговоры', color: 'bg-orange-200 dark:bg-orange-900' },
 ];
 
-const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users, projects = [], tasks = [], onSaveDeal, onDeleteDeal, onCreateTask, onCreateClient, onOpenTask, autoOpenCreateModal = false }) => {
+const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users, projects = [], tasks = [], salesFunnels = [], onSaveDeal, onDeleteDeal, onCreateTask, onCreateClient, onOpenTask, onOpenSettings, autoOpenCreateModal = false }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'rejected'>('kanban');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
@@ -47,6 +50,15 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
   const [chatMessage, setChatMessage] = useState('');
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [showTaskDropdown, setShowTaskDropdown] = useState(false);
+  const [selectedFunnelId, setSelectedFunnelId] = useState<string>('');
+  const [funnelId, setFunnelId] = useState<string>('');
+
+  // Устанавливаем первую воронку по умолчанию, если она есть
+  useEffect(() => {
+    if (salesFunnels.length > 0 && !selectedFunnelId) {
+      setSelectedFunnelId(salesFunnels[0].id);
+    }
+  }, [salesFunnels]);
 
   // Автоматически открываем модалку создания при монтировании, если autoOpenCreateModal = true
   useEffect(() => {
@@ -72,6 +84,7 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
     setAmount(''); 
     setStage('new'); 
     setSource('manual'); 
+    setFunnelId(selectedFunnelId || salesFunnels[0]?.id || ''); 
     setAssigneeId(users[0]?.id || ''); 
     setNotes('');
     setComments([]); 
@@ -87,6 +100,7 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
     setContactName(d.contactName || ''); 
     setAmount(d.amount.toString()); 
     setStage(d.stage); 
+    setFunnelId(d.funnelId || ''); 
     setAssigneeId(d.assigneeId); 
     setSource(d.source || 'manual'); 
     setNotes(d.notes || '');
@@ -104,6 +118,7 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
           amount: parseFloat(amount) || 0, 
           currency: 'UZS', 
           stage, 
+          funnelId: funnelId || undefined,
           source, 
           assigneeId, 
           notes: notes || undefined,
@@ -117,12 +132,54 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
   };
 
   const handleSendChat = async () => {
-      if (!chatMessage.trim() || !editingDeal?.telegramChatId) return;
-      await sendClientMessage(editingDeal.telegramChatId, chatMessage);
-      const c: Comment = { id: `c-${Date.now()}`, text: chatMessage, authorId: 'u1', createdAt: new Date().toISOString(), type: 'telegram_out' };
-      setComments([...comments, c]);
-      onSaveDeal({ ...editingDeal, comments: [...comments, c] });
-      setChatMessage('');
+      if (!chatMessage.trim() || !editingDeal) return;
+      
+      const deal = editingDeal;
+      let messageSent = false;
+
+      // Отправка через Telegram
+      if (deal.source === 'telegram' && deal.telegramChatId) {
+          await sendClientMessage(deal.telegramChatId, chatMessage);
+          messageSent = true;
+      }
+      
+      // Отправка через Instagram
+      if (deal.source === 'instagram' && deal.telegramChatId && deal.funnelId) {
+          const funnel = salesFunnels.find(f => f.id === deal.funnelId);
+          const instagramConfig = funnel?.sources?.instagram;
+          
+          if (instagramConfig?.enabled && instagramConfig?.instagramAccountId && instagramConfig?.accessToken) {
+              try {
+                  // telegramChatId для Instagram содержит conversation ID
+                  // Нужно извлечь user ID из conversation
+                  const conversationId = deal.telegramChatId;
+                  // Для Instagram нужно отправить через account ID и user ID
+                  // Пока используем conversation ID как есть
+                  await instagramService.sendMessage(
+                      instagramConfig.instagramAccountId,
+                      conversationId.split('_')[1] || conversationId, // User ID из conversation
+                      chatMessage,
+                      instagramConfig.accessToken
+                  );
+                  messageSent = true;
+              } catch (error) {
+                  console.error('Error sending Instagram message:', error);
+              }
+          }
+      }
+
+      if (messageSent || deal.source === 'manual' || deal.source === 'site' || deal.source === 'vk' || deal.source === 'recommendation') {
+          const c: Comment = { 
+              id: `c-${Date.now()}`, 
+              text: chatMessage, 
+              authorId: 'u1', 
+              createdAt: new Date().toISOString(), 
+              type: deal.source === 'instagram' ? 'telegram_out' : 'telegram_out' 
+          };
+          setComments([...comments, c]);
+          onSaveDeal({ ...deal, comments: [...comments, c] });
+          setChatMessage('');
+      }
   };
 
   const onDragStart = (e: React.DragEvent, id: string) => { setDraggedDealId(id); e.dataTransfer.effectAllowed = 'move'; };
@@ -227,9 +284,15 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
     setIsModalOpen(false);
   };
   
-  const activeDeals = deals.filter(d => d.stage !== 'won' && d.stage !== 'lost');
-  const wonDeals = deals.filter(d => d.stage === 'won');
-  const lostDeals = deals.filter(d => d.stage === 'lost');
+  // Фильтрация сделок по выбранной воронке, исключаем архивные
+  const filteredDeals = (selectedFunnelId 
+    ? deals.filter(d => d.funnelId === selectedFunnelId)
+    : deals
+  ).filter(d => !d.isArchived);
+  
+  const activeDeals = filteredDeals.filter(d => d.stage !== 'won' && d.stage !== 'lost');
+  const wonDeals = filteredDeals.filter(d => d.stage === 'won');
+  const lostDeals = filteredDeals.filter(d => d.stage === 'lost');
 
   const getSourceIcon = (s: string) => {
       switch(s) {
@@ -265,7 +328,9 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
                 <tbody className="divide-y divide-gray-100 dark:divide-[#333]">
                     {activeDeals.map(deal => {
                         const assignee = users.find(u => u.id === deal.assigneeId);
-                        const stageLabel = STAGES.find(s => s.id === deal.stage)?.label || deal.stage;
+                        const dealFunnel = deal.funnelId ? salesFunnels.find(f => f.id === deal.funnelId) : null;
+                        const dealStage = dealFunnel?.stages.find(s => s.id === deal.stage);
+                        const stageLabel = dealStage?.name || STAGES.find(s => s.id === deal.stage)?.label || deal.stage;
                         const dealProject = projects.find(p => p.id === deal.projectId);
                         return (
                             <tr key={deal.id} onClick={() => handleOpenEdit(deal)} className="hover:bg-gray-50 dark:hover:bg-[#2a2a2a] cursor-pointer group transition-colors">
@@ -294,6 +359,32 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
       </div>
   );
 
+  // Если воронок нет, показываем экран приглашения
+  if (salesFunnels.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center bg-white dark:bg-[#191919]">
+        <div className="text-center max-w-md px-6">
+          <TrendingUp size={64} className="mx-auto text-gray-300 dark:text-gray-600 mb-6" />
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-3">
+            Создайте свою первую воронку
+          </h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            Настройте воронку продаж в настройках, чтобы начать работу со сделками
+          </p>
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2 shadow-sm mx-auto"
+            >
+              <Plus size={18} />
+              Создать воронку в настройках
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="max-w-7xl mx-auto w-full pt-8 px-6 flex-shrink-0">
@@ -305,14 +396,24 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
                 Управление сделками и продажами
               </p>
             </div>
-          <button
-            onClick={handleOpenCreate}
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center gap-2 shadow-sm"
-          >
-              <Plus size={18} />
-            <span className="hidden sm:inline">Создать</span>
-          </button>
-        </div>
+            <div className="flex items-center gap-3">
+              <div className="min-w-[180px]">
+                <TaskSelect
+                  value={selectedFunnelId}
+                  onChange={setSelectedFunnelId}
+                  options={salesFunnels.map(f => ({ value: f.id, label: f.name }))}
+                  className="bg-white dark:bg-[#333] border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <button
+                onClick={handleOpenCreate}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center gap-2 shadow-sm"
+              >
+                <Plus size={18} />
+                <span className="hidden sm:inline">Создать</span>
+              </button>
+            </div>
+          </div>
           {/* View Mode Tabs */}
           <div className="flex items-center gap-2 bg-gray-100 dark:bg-[#252525] rounded-full p-1 text-xs">
             <button
@@ -480,12 +581,23 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
                               <input required value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100 text-sm md:text-base" placeholder="Название сделки"/>
                               
                               <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">Воронка</label>
+                                  <TaskSelect
+                                      value={funnelId}
+                                      onChange={setFunnelId}
+                                      options={salesFunnels.map(f => ({ value: f.id, label: f.name }))}
+                                      placeholder="Выберите воронку"
+                                  />
+                              </div>
+                              <div>
                                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">Стадия</label>
                                   <TaskSelect
                                       value={stage}
                                       onChange={setStage}
                                       options={[
-                                          ...STAGES.map(s => ({ value: s.id, label: s.label })),
+                                          ...(funnelId && currentFunnel 
+                                              ? currentFunnel.stages.map(s => ({ value: s.id, label: s.name }))
+                                              : STAGES.map(s => ({ value: s.id, label: s.label }))),
                                           { value: 'won', label: 'Выиграна' },
                                           { value: 'lost', label: 'Проиграна' }
                                       ]}
@@ -498,10 +610,11 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
                                       value={source}
                                       onChange={setSource}
                                       options={[
+                                          { value: 'manual', label: 'Вручную' },
+                                          { value: 'site', label: 'Заявка с сайта' },
                                           { value: 'instagram', label: 'Instagram' },
                                           { value: 'telegram', label: 'Telegram' },
-                                          { value: 'site', label: 'Сайт' },
-                                          { value: 'manual', label: 'Вручную' },
+                                          { value: 'vk', label: 'ВКонтакте' },
                                           { value: 'recommendation', label: 'Рекомендация' }
                                       ]}
                                   />

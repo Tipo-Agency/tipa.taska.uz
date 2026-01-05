@@ -6,4 +6,6 @@ export { Textarea } from './Textarea';
 export { Card } from './Card';
 export { Badge } from './Badge';
 export { Tabs } from './Tabs';
+export { CreateButton } from './CreateButton';
+export type { CreateOption } from './CreateButton';
 

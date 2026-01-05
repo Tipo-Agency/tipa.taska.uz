@@ -13,7 +13,8 @@ export default defineConfig(({ mode }) => {
           clientPort: 3000,
         },
         watch: {
-          usePolling: false,
+          usePolling: true,
+          interval: 100,
           ignored: ['**/node_modules/**', '**/.git/**'],
         },
       },

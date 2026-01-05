@@ -78,25 +78,37 @@ export function createSaveHandler<T extends CrudItem>(
 
 /**
  * Создает функцию удаления элемента с уведомлением и синхронизацией
+ * Использует мягкое удаление (isArchived: true) вместо физического удаления
  * @param setter - функция для обновления состояния
  * @param apiUpdate - функция для обновления через API
  * @param notification - функция для показа уведомления
  * @param successMessage - сообщение об успехе
  * @returns функция удаления
  */
-export function createDeleteHandler<T extends CrudItem>(
+export function createDeleteHandler<T extends CrudItem & { isArchived?: boolean }>(
   setter: (items: T[]) => void,
-  apiUpdate: (items: T[]) => void,
+  apiUpdate: (items: T[]) => void | Promise<void>,
   notification: (msg: string) => void,
   successMessage: string
 ) {
-  return (id: string) => {
+  return async (id: string) => {
+    const now = new Date().toISOString();
+    // Мягкое удаление: помечаем элемент как архивный вместо физического удаления
+    // Это решает проблему синхронизации - архивные элементы не возвращаются из Firebase
     setter(prevItems => {
-      const updated = deleteItem(prevItems, id);
-      apiUpdate(updated);
-      notification(successMessage);
+      const updated = prevItems.map(item => {
+        if (item.id === id) {
+          return { ...item, isArchived: true, updatedAt: now } as T;
+        }
+        return { ...item, updatedAt: item.updatedAt || now } as T;
+      });
+      // Вызываем apiUpdate асинхронно, но не ждем его завершения для обновления UI
+      Promise.resolve(apiUpdate(updated)).catch(err => {
+        console.error('Ошибка сохранения в Firebase:', err);
+      });
       return updated;
     });
+    notification(successMessage);
   };
 }
 

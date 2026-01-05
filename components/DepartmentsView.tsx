@@ -81,7 +81,7 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ departments, users, o
        <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
          <div className="max-w-5xl mx-auto w-full px-6 pb-20">
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {departments.map(dep => {
+           {departments.filter(dep => !dep.isArchived).map(dep => {
                const head = users.find(u => u.id === dep.headId);
                return (
                    <div key={dep.id} className="bg-white dark:bg-[#252525] border border-gray-200 dark:border-[#333] rounded-xl p-6 shadow-sm hover:shadow-md transition-all group relative">

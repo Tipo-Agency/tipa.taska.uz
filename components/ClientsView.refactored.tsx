@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Client, Deal, AccountsReceivable, SalesFunnel } from '../types';
-import { FilterConfig } from './FiltersPanel';
+import { Client, Contract, OneTimeDeal, AccountsReceivable, SalesFunnel } from '../types';
+import { Plus } from 'lucide-react';
+import { Button } from './ui';
+import { FiltersPanel, FilterConfig } from './FiltersPanel';
 import {
   ClientsHeader,
   ClientsTabs,
@@ -16,21 +18,21 @@ import {
 
 interface ClientsViewProps {
   clients: Client[];
-  contracts: Deal[]; // Договоры (recurring: true)
-  oneTimeDeals?: Deal[]; // Продажи (recurring: false)
+  contracts: Contract[];
+  oneTimeDeals?: OneTimeDeal[];
   accountsReceivable?: AccountsReceivable[];
   salesFunnels?: SalesFunnel[];
   onSaveClient: (client: Client) => void;
   onDeleteClient: (id: string) => void;
-  onSaveContract: (deal: Deal) => void;
+  onSaveContract: (contract: Contract) => void;
   onDeleteContract: (id: string) => void;
-  onSaveOneTimeDeal?: (deal: Deal) => void;
+  onSaveOneTimeDeal?: (deal: OneTimeDeal) => void;
   onDeleteOneTimeDeal?: (id: string) => void;
   onSaveAccountsReceivable?: (receivable: AccountsReceivable) => void;
   onDeleteAccountsReceivable?: (id: string) => void;
 }
 
-const ClientsView: React.FC<ClientsViewProps> = ({ 
+const ClientsView: React.FC<ClientsViewProps> = ({
   clients,
   contracts,
   oneTimeDeals = [],
@@ -54,13 +56,13 @@ const ClientsView: React.FC<ClientsViewProps> = ({
   // Modal states
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-
+  
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
-  const [editingContract, setEditingContract] = useState<Deal | null>(null);
+  const [editingContract, setEditingContract] = useState<Contract | null>(null);
   const [targetClientId, setTargetClientId] = useState<string>('');
-
+  
   const [isOneTimeDealModalOpen, setIsOneTimeDealModalOpen] = useState(false);
-  const [editingOneTimeDeal, setEditingOneTimeDeal] = useState<Deal | null>(null);
+  const [editingOneTimeDeal, setEditingOneTimeDeal] = useState<OneTimeDeal | null>(null);
   const [oneTimeDealClientId, setOneTimeDealClientId] = useState<string>('');
   
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
@@ -77,7 +79,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({
     }
     
     if (searchQuery) {
-    const query = searchQuery.toLowerCase();
+      const query = searchQuery.toLowerCase();
       filtered = filtered.filter(c => c.name.toLowerCase().includes(query));
     }
     
@@ -135,45 +137,27 @@ const ClientsView: React.FC<ClientsViewProps> = ({
     setContractStatusFilter('all');
   }, []);
 
-  const activeFiltersCount = useMemo(() => 
-    contractFilters.filter(f => f.value && f.value !== 'all' && f.value !== '').length,
-    [contractFilters]
-  );
-
-  // Handler for create button - depends on active tab
-  const handleCreateClick = () => {
-    if (activeTab === 'clients') {
-      handleOpenClientCreate();
-    } else if (activeTab === 'contracts') {
-      handleOpenContractCreate('');
-    } else if (activeTab === 'finance') {
-      // Finance tab doesn't have create functionality
-    } else if (activeTab === 'receivables') {
-      handleOpenReceivableCreate('');
-    }
-  };
-
   // Handlers
   const handleOpenClientCreate = () => {
-      setEditingClient(null);
-      setIsClientModalOpen(true);
+    setEditingClient(null);
+    setIsClientModalOpen(true);
   };
 
   const handleOpenClientEdit = (client: Client) => {
-      setEditingClient(client);
-      setIsClientModalOpen(true);
+    setEditingClient(client);
+    setIsClientModalOpen(true);
   };
 
   const handleOpenContractCreate = (clientId: string) => {
-      setEditingContract(null);
-      setTargetClientId(clientId);
-      setIsContractModalOpen(true);
+    setEditingContract(null);
+    setTargetClientId(clientId);
+    setIsContractModalOpen(true);
   };
-  
+
   const handleOpenContractEdit = (contract: Contract) => {
-      setEditingContract(contract);
-      setTargetClientId(contract.clientId);
-      setIsContractModalOpen(true);
+    setEditingContract(contract);
+    setTargetClientId(contract.clientId);
+    setIsContractModalOpen(true);
   };
 
   const handleOpenOneTimeDealCreate = (clientId: string) => {
@@ -218,16 +202,60 @@ const ClientsView: React.FC<ClientsViewProps> = ({
           selectedFunnelId={selectedFunnelId}
           onFunnelChange={setSelectedFunnelId}
           showFunnelFilter={activeTab === 'clients' || activeTab === 'contracts'}
-          activeTab={activeTab}
-          onCreateClick={handleCreateClick}
-          onFiltersClick={activeTab === 'contracts' ? () => setShowFilters(!showFilters) : undefined}
-          showFilters={showFilters}
-          hasActiveFilters={hasActiveContractFilters}
-          activeFiltersCount={activeFiltersCount}
         />
 
         <ClientsTabs activeTab={activeTab} onTabChange={setActiveTab} />
-                </div>
+
+        {/* Action buttons */}
+        <div className="mb-6 flex justify-end gap-2">
+          {activeTab === 'clients' && (
+            <Button
+              onClick={handleOpenClientCreate}
+              icon={Plus}
+              iconPosition="left"
+              size="md"
+              className="shrink-0"
+            >
+              <span className="hidden sm:inline">Создать</span>
+              <span className="sm:hidden">+</span>
+            </Button>
+          )}
+          {activeTab === 'contracts' && (
+            <>
+              <FiltersPanel
+                filters={contractFilters}
+                showFilters={showFilters}
+                onToggleFilters={() => setShowFilters(!showFilters)}
+                hasActiveFilters={hasActiveContractFilters}
+                onClearFilters={clearContractFilters}
+                columns={3}
+              />
+              <Button
+                onClick={() => handleOpenContractCreate('')}
+                icon={Plus}
+                iconPosition="left"
+                size="md"
+                className="shrink-0"
+              >
+                <span className="hidden sm:inline">Создать</span>
+                <span className="sm:hidden">+</span>
+              </Button>
+            </>
+          )}
+          {activeTab === 'receivables' && onSaveAccountsReceivable && (
+            <Button
+              onClick={() => handleOpenReceivableCreate('')}
+              icon={Plus}
+              iconPosition="left"
+              size="md"
+              className="shrink-0"
+            >
+              <span className="hidden sm:inline">Добавить задолженность</span>
+              <span className="sm:hidden">+</span>
+            </Button>
+          )}
+        </div>
+      </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="max-w-7xl mx-auto w-full px-6 pb-20 h-full overflow-y-auto custom-scrollbar">
@@ -237,15 +265,18 @@ const ClientsView: React.FC<ClientsViewProps> = ({
               contracts={contracts}
               onEditClient={handleOpenClientEdit}
               onCreateContract={handleOpenContractCreate}
+              onCreateOneTimeDeal={onSaveOneTimeDeal ? handleOpenOneTimeDealCreate : undefined}
             />
           )}
-                    {activeTab === 'contracts' && (
+          {activeTab === 'contracts' && (
             <ContractsTab
               contracts={filteredContracts}
               clients={clients}
-                                filters={contractFilters}
-                                showFilters={showFilters}
-                                onClearFilters={clearContractFilters}
+              filters={contractFilters}
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters(!showFilters)}
+              hasActiveFilters={hasActiveContractFilters}
+              onClearFilters={clearContractFilters}
               onEditContract={handleOpenContractEdit}
             />
           )}
@@ -262,25 +293,21 @@ const ClientsView: React.FC<ClientsViewProps> = ({
               clients={clients}
               onDeleteReceivable={onDeleteAccountsReceivable}
             />
-                    )}
-                </div>
-            </div>
-            
+          )}
+        </div>
+      </div>
+
       {/* Modals */}
       <ClientModal
         isOpen={isClientModalOpen}
         editingClient={editingClient}
         salesFunnels={salesFunnels}
-        contracts={contracts}
-        oneTimeDeals={oneTimeDeals}
         onClose={() => setIsClientModalOpen(false)}
         onSave={(client) => {
           onSaveClient(client);
           setIsClientModalOpen(false);
         }}
         onDelete={onDeleteClient}
-        onEditContract={handleOpenContractEdit}
-        onEditOneTimeDeal={handleOpenOneTimeDealEdit}
       />
 
       <ContractModal
@@ -316,14 +343,16 @@ const ClientsView: React.FC<ClientsViewProps> = ({
           editingReceivable={editingReceivable}
           clientId={receivableClientId}
           clients={clients}
-          deals={[...contracts, ...oneTimeDeals]} // Объединяем договоры и продажи
+          contracts={contracts}
+          oneTimeDeals={oneTimeDeals}
           onClose={() => setIsReceivableModalOpen(false)}
           onSave={handleSaveAccountsReceivable}
           onDelete={onDeleteAccountsReceivable}
         />
-       )}
+      )}
     </div>
   );
 };
 
 export default ClientsView;
+

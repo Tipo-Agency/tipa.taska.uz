@@ -137,7 +137,7 @@ const EmployeesView: React.FC<EmployeesViewProps> = ({
 
   const renderCards = () => (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {employees.map(info => {
+           {employees.filter(info => !info.isArchived).map(info => {
                const user = getEmployeeUser(info.userId);
                return (
                    <div key={info.id} className="bg-white dark:bg-[#252525] border border-gray-200 dark:border-[#333] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group relative flex flex-col">

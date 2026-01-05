@@ -1,17 +1,19 @@
 
-import { useState } from 'react';
-import { Client, Contract, Deal, EmployeeInfo, OneTimeDeal, AccountsReceivable } from '../../../types';
+import { useState, useMemo } from 'react';
+import { Client, Deal, EmployeeInfo, AccountsReceivable } from '../../../types';
 import { api } from '../../../backend/api';
 import { createSaveHandler, createDeleteHandler } from '../../../utils/crudUtils';
 import { NOTIFICATION_MESSAGES } from '../../../constants/messages';
 
 export const useCRMLogic = (showNotification: (msg: string) => void) => {
   const [clients, setClients] = useState<Client[]>([]);
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [oneTimeDeals, setOneTimeDeals] = useState<OneTimeDeal[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]); // Объединенная сущность для договоров и продаж
   const [accountsReceivable, setAccountsReceivable] = useState<AccountsReceivable[]>([]);
   const [employeeInfos, setEmployeeInfos] = useState<EmployeeInfo[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
+  
+  // Алиасы для обратной совместимости (мемоизированы для правильного обновления)
+  const contracts = useMemo(() => deals.filter(d => d.recurring === true), [deals]);
+  const oneTimeDeals = useMemo(() => deals.filter(d => d.recurring === false), [deals]);
 
   // Clients
   const saveClient = createSaveHandler(
@@ -27,19 +29,35 @@ export const useCRMLogic = (showNotification: (msg: string) => void) => {
     NOTIFICATION_MESSAGES.CLIENT_DELETED
   );
 
-  // Contracts
-  const saveContract = createSaveHandler(
-    setContracts,
-    api.contracts.updateAll,
+  // Deals (объединенные договоры и продажи)
+  const saveDeal = createSaveHandler(
+    setDeals,
+    api.deals.updateAll,
     showNotification,
-    NOTIFICATION_MESSAGES.CONTRACT_SAVED
+    'Сделка сохранена'
   );
-  const deleteContract = createDeleteHandler(
-    setContracts,
-    api.contracts.updateAll,
+  const deleteDeal = createDeleteHandler(
+    setDeals,
+    api.deals.updateAll,
     showNotification,
-    NOTIFICATION_MESSAGES.CONTRACT_DELETED
+    'Сделка удалена'
   );
+  
+  // Алиасы для обратной совместимости
+  const saveContract = (deal: Deal) => {
+    const contractDeal: Deal = { ...deal, recurring: true };
+    saveDeal(contractDeal);
+  };
+  const deleteContract = (id: string) => {
+    deleteDeal(id);
+  };
+  const saveOneTimeDeal = (deal: Deal) => {
+    const oneTimeDeal: Deal = { ...deal, recurring: false };
+    saveDeal(oneTimeDeal);
+  };
+  const deleteOneTimeDeal = (id: string) => {
+    deleteDeal(id);
+  };
 
   // Employees
   const saveEmployee = createSaveHandler(
@@ -55,33 +73,6 @@ export const useCRMLogic = (showNotification: (msg: string) => void) => {
     NOTIFICATION_MESSAGES.EMPLOYEE_DELETED
   );
 
-  // Deals
-  const saveDeal = createSaveHandler(
-    setDeals,
-    api.deals.updateAll,
-    showNotification,
-    NOTIFICATION_MESSAGES.DEAL_SAVED
-  );
-  const deleteDeal = createDeleteHandler(
-    setDeals,
-    api.deals.updateAll,
-    showNotification,
-    NOTIFICATION_MESSAGES.DEAL_DELETED
-  );
-
-  // OneTimeDeals
-  const saveOneTimeDeal = createSaveHandler(
-    setOneTimeDeals,
-    api.oneTimeDeals.updateAll,
-    showNotification,
-    'Разовая сделка сохранена'
-  );
-  const deleteOneTimeDeal = createDeleteHandler(
-    setOneTimeDeals,
-    api.oneTimeDeals.updateAll,
-    showNotification,
-    'Разовая сделка удалена'
-  );
 
   // AccountsReceivable
   const saveAccountsReceivable = createSaveHandler(
@@ -98,15 +89,27 @@ export const useCRMLogic = (showNotification: (msg: string) => void) => {
   );
 
   return {
-    state: { clients, contracts, oneTimeDeals, accountsReceivable, employeeInfos, deals },
-    setters: { setClients, setContracts, setOneTimeDeals, setAccountsReceivable, setEmployeeInfos, setDeals },
+    state: { 
+      clients, 
+      deals, // Основная сущность
+      contracts, // Алиас для обратной совместимости
+      oneTimeDeals, // Алиас для обратной совместимости
+      accountsReceivable, 
+      employeeInfos 
+    },
+    setters: { 
+      setClients, 
+      setDeals, // Основной setter
+      setAccountsReceivable, 
+      setEmployeeInfos 
+    },
     actions: { 
       saveClient, deleteClient, 
-      saveContract, deleteContract, 
-      saveOneTimeDeal, deleteOneTimeDeal,
+      saveDeal, deleteDeal, // Основные методы
+      saveContract, deleteContract, // Алиасы
+      saveOneTimeDeal, deleteOneTimeDeal, // Алиасы
       saveAccountsReceivable, deleteAccountsReceivable,
-      saveEmployee, deleteEmployee, 
-      saveDeal, deleteDeal 
+      saveEmployee, deleteEmployee
     }
   };
 };

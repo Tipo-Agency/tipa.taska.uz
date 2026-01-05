@@ -67,10 +67,18 @@ export const useSettingsLogic = (showNotification: (msg: string) => void) => {
       setIsEditTableModalOpen(false); setEditingTable(null); showNotification('Страница обновлена');
   };
 
-  const deleteTable = (id: string) => {
-      const newTables = tables.filter(t => t.id !== id); 
-      setTables(newTables); api.tables.updateAll(newTables);
+  const deleteTable = async (id: string) => {
+      const now = new Date().toISOString();
+      // Мягкое удаление: помечаем таблицу как архивную
+      const updated = tables.map(t => 
+          t.id === id 
+              ? { ...t, isArchived: true, updatedAt: now } 
+              : { ...t, updatedAt: t.updatedAt || now }
+      );
+      setTables(updated); 
+      await api.tables.updateAll(updated);
       if (activeTableId === id) setCurrentView('home');
+      showNotification('Страница перемещена в архив');
   };
 
   const updateNotificationPrefs = (prefs: NotificationPreferences) => {

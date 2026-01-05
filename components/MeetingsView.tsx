@@ -11,10 +11,11 @@ interface MeetingsViewProps {
   showAll?: boolean; // Aggregator mode
   tables?: TableCollection[];
   onSaveMeeting: (meeting: Meeting) => void;
+  onDeleteMeeting?: (meetingId: string) => void;
   onUpdateSummary: (meetingId: string, summary: string) => void;
 }
 
-const MeetingsView: React.FC<MeetingsViewProps> = ({ meetings = [], users, tableId, showAll = false, tables = [], onSaveMeeting, onUpdateSummary }) => {
+const MeetingsView: React.FC<MeetingsViewProps> = ({ meetings = [], users, tableId, showAll = false, tables = [], onSaveMeeting, onDeleteMeeting, onUpdateSummary }) => {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
@@ -263,14 +264,30 @@ const MeetingsView: React.FC<MeetingsViewProps> = ({ meetings = [], users, table
                                     <span className="flex items-center gap-1 bg-gray-50 dark:bg-[#303030] border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded text-xs"><Clock size={12} className="text-gray-500 dark:text-gray-400"/> {meeting.time}</span>
                                 </div>
                             </div>
-                            <div className="flex -space-x-2 mr-8">
-                                {(meeting.participantIds || []).map(uid => {
-                                    const u = users.find(user => user.id === uid);
-                                    if (!u) return null;
-                                    return (
-                                        <img key={uid} src={u.avatar} className="w-8 h-8 rounded-full border-2 border-white dark:border-[#252525] object-cover object-center" title={u.name} />
-                                    );
-                                })}
+                            <div className="flex items-center gap-2">
+                                <div className="flex -space-x-2 mr-2">
+                                    {(meeting.participantIds || []).map(uid => {
+                                        const u = users.find(user => user.id === uid);
+                                        if (!u) return null;
+                                        return (
+                                            <img key={uid} src={u.avatar} className="w-8 h-8 rounded-full border-2 border-white dark:border-[#252525] object-cover object-center" title={u.name} />
+                                        );
+                                    })}
+                                </div>
+                                {onDeleteMeeting && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (confirm('Удалить встречу?')) {
+                                                onDeleteMeeting(meeting.id);
+                                            }
+                                        }}
+                                        className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                        title="Удалить встречу"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                )}
                             </div>
                         </div>
 

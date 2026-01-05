@@ -4,7 +4,7 @@ import {
   Task, User, Project, StatusOption, PriorityOption, ActivityLog, 
   Deal, Client, Contract, EmployeeInfo, Meeting, ContentPost, 
   Doc, Folder, TableCollection, Department, FinanceCategory, 
-  FinancePlan, PurchaseRequest, FinancialPlanDocument, FinancialPlanning, OrgPosition, BusinessProcess, 
+  FinancePlan, PurchaseRequest, FinancialPlanDocument, FinancialPlanning, OrgPosition, BusinessProcess, SalesFunnel, 
   ViewMode, AutomationRule, Warehouse, InventoryItem, StockBalance, StockMovement, OneTimeDeal, AccountsReceivable
 } from '../types';
 
@@ -61,6 +61,7 @@ interface AppRouterProps {
   orgPositions: OrgPosition[];
   businessProcesses: BusinessProcess[];
   automationRules?: AutomationRule[];
+  salesFunnels?: SalesFunnel[];
   settingsActiveTab?: string;
   activeSpaceTab?: 'content-plan' | 'backlog' | 'functionality';
   telegramBotToken?: string;
@@ -166,17 +167,35 @@ export const AppRouter: React.FC<AppRouterProps> = (props) => {
       return (
           <SettingsView 
               users={props.users} projects={props.projects} tasks={props.allTasks} statuses={props.statuses} priorities={props.priorities} tables={props.tables} automationRules={props.automationRules} currentUser={props.currentUser}
-              departments={props.departments} financeCategories={props.financeCategories}
+              departments={props.departments}
+              docs={props.docs} contentPosts={props.contentPosts} financeCategories={props.financeCategories}
+              employeeInfos={props.employeeInfos} deals={props.deals} clients={props.clients} contracts={props.contracts} meetings={props.meetings}
+              salesFunnels={props.salesFunnels} businessProcesses={props.businessProcesses}
               onUpdateUsers={actions.updateUsers} onUpdateProjects={actions.updateProjects} onUpdateStatuses={actions.updateStatuses} onUpdatePriorities={actions.updatePriorities}
               onUpdateTable={actions.updateTable} onCreateTable={actions.openCreateTable} onDeleteTable={actions.deleteTable}
               onUpdateNotificationPrefs={actions.updateNotificationPrefs} onSaveAutomationRule={actions.saveAutomationRule} onDeleteAutomationRule={actions.deleteAutomationRule}
               onUpdateProfile={actions.updateProfile} onSaveDeal={actions.saveDeal} onClose={actions.closeSettings} initialTab={props.settingsActiveTab}
               onSaveDepartment={actions.saveDepartment} onDeleteDepartment={actions.deleteDepartment}
               onSaveFinanceCategory={actions.saveFinanceCategory} onDeleteFinanceCategory={actions.deleteFinanceCategory}
+              onSaveSalesFunnel={actions.saveSalesFunnel} onDeleteSalesFunnel={actions.deleteSalesFunnel}
               onUpdateTelegramBotToken={actions.onUpdateTelegramBotToken}
               telegramBotToken={props.telegramBotToken}
               onRestoreTask={actions.restoreTask}
               onPermanentDelete={actions.permanentDeleteTask}
+              onRestoreUser={actions.restoreUser}
+              onRestoreEmployee={actions.restoreEmployee}
+              onRestoreDoc={actions.restoreDoc}
+              onRestorePost={actions.restorePost}
+              onRestoreProject={actions.restoreProject}
+              onRestoreDepartment={actions.restoreDepartment}
+              onRestoreFinanceCategory={actions.restoreFinanceCategory}
+              onRestoreSalesFunnel={actions.restoreSalesFunnel}
+              onRestoreTable={actions.restoreTable}
+              onRestoreBusinessProcess={actions.restoreBusinessProcess}
+              onRestoreDeal={actions.restoreDeal}
+              onRestoreClient={actions.restoreClient}
+              onRestoreContract={actions.restoreContract}
+              onRestoreMeeting={actions.restoreMeeting}
           />
       );
   }
@@ -212,7 +231,7 @@ export const AppRouter: React.FC<AppRouterProps> = (props) => {
   }
 
   if (view === 'sales-funnel' || view === 'clients') {
-      return <CRMModule view={view} deals={props.deals} clients={props.clients} contracts={props.contracts} oneTimeDeals={props.oneTimeDeals} accountsReceivable={props.accountsReceivable} users={props.users} projects={props.projects} tasks={props.allTasks} actions={actions} />;
+      return <CRMModule view={view} deals={props.deals} clients={props.clients} contracts={props.contracts} oneTimeDeals={props.oneTimeDeals} accountsReceivable={props.accountsReceivable} users={props.users} salesFunnels={props.salesFunnels} projects={props.projects} tasks={props.allTasks} actions={actions} />;
   }
 
   if (view === 'finance') {

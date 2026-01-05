@@ -35,12 +35,28 @@ export const useAuthLogic = (showNotification: (msg: string) => void) => {
   };
 
   const updateUsers = (newUsers: User[]) => {
-    setUsers(newUsers);
-    api.users.updateAll(newUsers);
+    const now = new Date().toISOString();
+    // Устанавливаем updatedAt для всех пользователей при обновлении
+    // ВАЖНО: При удалении пользователя используется мягкое удаление (isArchived: true)
+    const usersWithTimestamp = newUsers.map(u => ({
+      ...u,
+      updatedAt: u.updatedAt || now
+    }));
+    // Фильтруем архивных пользователей перед установкой в state
+    const activeUsers = usersWithTimestamp.filter(u => !u.isArchived);
+    setUsers(activeUsers);
+    // Всегда сохраняем через API, чтобы изменения попали в Firebase (сохраняем всех, включая архивных)
+    api.users.updateAll(usersWithTimestamp);
     // Refresh current user if data changed
     if (currentUser) {
-        const u = newUsers.find(curr => curr.id === currentUser.id);
-        if (u) setCurrentUser(u);
+        const u = usersWithTimestamp.find(curr => curr.id === currentUser.id);
+        // Если текущий пользователь был архивирован или удален, выходим
+        if (u && !u.isArchived) {
+          setCurrentUser(u);
+        } else {
+          setCurrentUser(null);
+          storageService.clearActiveUserId();
+        }
     }
   };
 

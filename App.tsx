@@ -187,6 +187,7 @@ const App = () => {
                 inventoryMovements={state.inventoryMovements}
                 orgPositions={state.orgPositions}
                 businessProcesses={state.businessProcesses}
+                salesFunnels={state.salesFunnels}
                 automationRules={state.automationRules}
                 settingsActiveTab={state.settingsActiveTab}
                 activeSpaceTab={state.activeSpaceTab}

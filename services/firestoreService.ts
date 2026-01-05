@@ -109,10 +109,11 @@ export const firestoreService = {
       const collections = [
         'users', 'tasks', 'projects', 'tables', 'docs', 'folders',
         'meetings', 'contentPosts', 'activity', 'statuses', 'priorities',
-        'clients', 'contracts', 'oneTimeDeals', 'accountsReceivable', 'employeeInfos', 'deals', 'notificationPrefs',
+        'clients', 'deals', 'accountsReceivable', 'employeeInfos', 'notificationPrefs', // deals объединяет contracts и oneTimeDeals
         'departments', 'financeCategories', 'financePlan', 'purchaseRequests',
         'orgPositions', 'businessProcesses', 'automationRules',
-        'warehouses', 'inventoryItems', 'stockMovements'
+        'warehouses', 'inventoryItems', 'stockMovements',
+        'salesFunnels'
       ];
 
       for (const collectionName of collections) {
@@ -123,17 +124,20 @@ export const firestoreService = {
         
         if (Array.isArray(data)) {
           // Save each document in the array
+          // Используем setDoc без merge для полной перезаписи - это гарантирует, что все поля обновятся
           for (const item of data) {
             if (!item || !item.id) continue;
             const docRef = doc(collectionRef, item.id);
             const cleanedData = prepareDataForFirestore(item);
-            batch.set(docRef, cleanedData);
+            // setDoc без merge полностью перезаписывает документ, обновляя все поля
+            // Это гарантирует, что старые записи получат все новые поля
+            batch.set(docRef, cleanedData, { merge: false });
           }
         } else if (typeof data === 'object') {
           // Save as single document (like financePlan)
           const docRef = doc(collectionRef, 'default');
           const cleanedData = prepareDataForFirestore(data);
-          batch.set(docRef, cleanedData);
+          batch.set(docRef, cleanedData, { merge: false });
         }
       }
 
@@ -157,7 +161,8 @@ export const firestoreService = {
         'departments', 'financeCategories', 'financePlan', 'purchaseRequests',
         'financialPlanDocuments', 'financialPlannings',
         'orgPositions', 'businessProcesses', 'automationRules',
-        'warehouses', 'inventoryItems', 'stockMovements'
+        'warehouses', 'inventoryItems', 'stockMovements',
+        'salesFunnels'
       ];
 
       const state: any = {};

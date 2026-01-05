@@ -73,8 +73,8 @@ export const TableGroups: React.FC<TableGroupsProps> = ({
   const groupedTables = useMemo(() => {
     const groups: Map<TableType, TableCollection[]> = new Map();
     
-    // Фильтруем задачи - не показываем их в пространствах
-    const filteredTables = tables.filter(table => table.type !== 'tasks');
+    // Фильтруем задачи и архивные таблицы - не показываем их в пространствах
+    const filteredTables = tables.filter(table => table.type !== 'tasks' && !table.isArchived);
     
     // Оставляем только контент-планы, бэклог и функционал (встречи и документы убраны)
     const allowedTypes = ['content-plan', 'backlog', 'functionality'];

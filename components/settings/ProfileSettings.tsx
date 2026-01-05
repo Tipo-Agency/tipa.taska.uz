@@ -157,11 +157,13 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, u
           return;
       }
       if (confirm('Удалить пользователя? Это действие нельзя отменить.')) {
-          const updatedUsers = users.filter(u => u.id !== id);
+          const now = new Date().toISOString();
+          const updatedUsers = users.map(u => 
+              u.id === id 
+                  ? { ...u, isArchived: true, updatedAt: now } 
+                  : { ...u, updatedAt: u.updatedAt || now }
+          );
           onUpdateUsers(updatedUsers);
-          // Сохраняем в Firestore
-          const { storageService } = await import('../../services/storageService');
-          await storageService.saveToCloud();
       }
   };
   
@@ -312,7 +314,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, u
                 </form>
             </div>
             <div className="space-y-3">
-                {users.map(user => (
+                {users.filter(user => !user.isArchived).map(user => (
                     <div key={user.id} className="flex items-center justify-between p-4 bg-white dark:bg-[#252525] border border-gray-200 dark:border-[#333] rounded-xl hover:shadow-sm transition-shadow">
                         <div className="flex items-center gap-4">
                             <img 

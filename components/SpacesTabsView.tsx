@@ -55,8 +55,8 @@ export const SpacesTabsView: React.FC<SpacesTabsViewProps> = ({
     }
   }, [initialTab]);
 
-  // Фильтруем пространства по типу
-  const currentSpaces = tables.filter(t => t.type === activeTab);
+  // Фильтруем пространства по типу, исключаем архивные
+  const currentSpaces = tables.filter(t => t.type === activeTab && !t.isArchived);
 
   return (
     <div className="h-full flex flex-col min-h-0 bg-white dark:bg-[#191919]">

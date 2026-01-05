@@ -16,22 +16,51 @@ export const useContentLogic = (showNotification: (msg: string) => void, activeT
 
   // Meetings
   const saveMeeting = (m: Meeting) => { 
+      const now = new Date().toISOString();
       const existing = meetings.find(meeting => meeting.id === m.id);
       const u = existing 
-          ? meetings.map(meeting => meeting.id === m.id ? m : meeting)
-          : [...meetings, m]; 
+          ? meetings.map(meeting => meeting.id === m.id ? { ...m, updatedAt: now } : meeting)
+          : [...meetings, { ...m, createdAt: m.createdAt || now, updatedAt: now }]; 
       setMeetings(u); 
       api.meetings.updateAll(u); 
       showNotification(existing ? 'Встреча обновлена' : 'Встреча добавлена'); 
   };
-  const updateMeetingSummary = (id: string, summary: string) => { const u = meetings.map(m => m.id === id ? { ...m, summary } : m); setMeetings(u); api.meetings.updateAll(u); };
+  const deleteMeeting = (id: string) => {
+      const now = new Date().toISOString();
+      // Мягкое удаление: помечаем встречу как архивную
+      const u = meetings.map(m => {
+        if (m.id === id) {
+          return { ...m, isArchived: true, updatedAt: now };
+        }
+        return { ...m, updatedAt: m.updatedAt || now };
+      });
+      setMeetings(u);
+      api.meetings.updateAll(u);
+      showNotification('Встреча удалена');
+  };
+  const updateMeetingSummary = (id: string, summary: string) => { 
+      const now = new Date().toISOString();
+      const u = meetings.map(m => m.id === id ? { ...m, summary, updatedAt: now } : m); 
+      setMeetings(u); 
+      api.meetings.updateAll(u); 
+  };
 
   // Content Plan
   const savePost = (p: ContentPost) => {
       const updated = contentPosts.find(x => x.id === p.id) ? contentPosts.map(x => x.id === p.id ? p : x) : [...contentPosts, p];
       setContentPosts(updated); api.contentPosts.updateAll(updated); showNotification('Пост сохранен');
   };
-  const deletePost = (id: string) => { const u = contentPosts.filter(p => p.id !== id); setContentPosts(u); api.contentPosts.updateAll(u); showNotification('Пост удален'); };
+  const deletePost = (id: string) => { 
+      const now = new Date().toISOString();
+      const u = contentPosts.map(p => 
+          p.id === id 
+              ? { ...p, isArchived: true, updatedAt: now } 
+              : { ...p, updatedAt: p.updatedAt || now }
+      ); 
+      setContentPosts(u); 
+      api.contentPosts.updateAll(u); 
+      showNotification('Пост удален'); 
+  };
 
   // Docs
   const saveDoc = (docData: any, tableId?: string, folderId?: string) => {
@@ -87,8 +116,26 @@ export const useContentLogic = (showNotification: (msg: string) => void, activeT
       showNotification('Документ добавлен');
       return newDoc;
   };
-  const saveDocContent = (id: string, content: string, title: string) => { const u = docs.map(d => d.id === id ? { ...d, content, title } : d); setDocs(u); api.docs.updateAll(u); showNotification('Сохранено'); };
-  const deleteDoc = (id: string) => { const u = docs.filter(d => d.id !== id); setDocs(u); api.docs.updateAll(u); showNotification('Документ удален'); };
+  const saveDocContent = (id: string, content: string, title: string) => { 
+    const now = new Date().toISOString();
+    const u = docs.map(d => d.id === id ? { ...d, content, title, updatedAt: now } : d); 
+    setDocs(u); 
+    api.docs.updateAll(u); 
+    showNotification('Сохранено'); 
+  };
+  const deleteDoc = (id: string) => { 
+    const now = new Date().toISOString();
+    // Мягкое удаление: помечаем документ как архивный
+    const u = docs.map(d => {
+      if (d.id === id) {
+        return { ...d, isArchived: true, updatedAt: now };
+      }
+      return { ...d, updatedAt: d.updatedAt || now };
+    });
+    setDocs(u); 
+    api.docs.updateAll(u); 
+    showNotification('Документ удален'); 
+  };
 
   // Folders
   const createFolder = (name: string, tableId?: string, parentFolderId?: string) => {
@@ -111,7 +158,14 @@ export const useContentLogic = (showNotification: (msg: string) => void, activeT
       showNotification('Папка создана');
   };
   const deleteFolder = (id: string) => { 
-      const u = folders.filter(f => f.id !== id); 
+      const now = new Date().toISOString();
+      // Мягкое удаление: помечаем папку как архивную
+      const u = folders.map(f => {
+        if (f.id === id) {
+          return { ...f, isArchived: true, updatedAt: now };
+        }
+        return { ...f, updatedAt: f.updatedAt || now };
+      });
       setFolders(u); 
       api.folders.updateAll(u); 
       showNotification('Папка удалена'); 
@@ -127,7 +181,7 @@ export const useContentLogic = (showNotification: (msg: string) => void, activeT
     state: { docs, folders, meetings, contentPosts, isDocModalOpen, activeDocId, targetFolderId, editingDoc },
     setters: { setDocs, setFolders, setMeetings, setContentPosts, setActiveDocId },
     actions: { 
-        saveMeeting, updateMeetingSummary, savePost, deletePost,
+        saveMeeting, deleteMeeting, updateMeetingSummary, savePost, deletePost,
         saveDoc, saveDocContent, deleteDoc, createFolder, deleteFolder, handleDocClick,
         openDocModal: (folderId?: string) => { setTargetFolderId(folderId); setEditingDoc(null); setIsDocModalOpen(true); },
         openEditDocModal: (doc: Doc) => { setEditingDoc(doc); setTargetFolderId(doc.folderId); setIsDocModalOpen(true); },

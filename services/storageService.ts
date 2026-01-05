@@ -1,5 +1,5 @@
 
-import { Doc, Project, Role, TableCollection, Task, User, Meeting, ActivityLog, StatusOption, PriorityOption, ContentPost, Client, EmployeeInfo, Contract, Folder, Deal, NotificationPreferences, Department, FinanceCategory, FinancePlan, PurchaseRequest, OrgPosition, BusinessProcess, AutomationRule, Warehouse, InventoryItem, StockMovement, OneTimeDeal, AccountsReceivable } from "../types";
+import { Doc, Project, Role, TableCollection, Task, User, Meeting, ActivityLog, StatusOption, PriorityOption, ContentPost, Client, EmployeeInfo, Contract, Folder, Deal, NotificationPreferences, Department, FinanceCategory, FinancePlan, PurchaseRequest, OrgPosition, BusinessProcess, AutomationRule, Warehouse, InventoryItem, StockMovement, OneTimeDeal, AccountsReceivable, SalesFunnel } from "../types";
 import { FIREBASE_DB_URL, MOCK_PROJECTS, MOCK_TABLES, DEFAULT_STATUSES, DEFAULT_PRIORITIES, DEFAULT_NOTIFICATION_PREFS, MOCK_DEPARTMENTS, DEFAULT_FINANCE_CATEGORIES, MOCK_ORG_POSITIONS, DEFAULT_AUTOMATION_RULES, TELEGRAM_BOT_TOKEN } from "../constants";
 import { firestoreService } from "./firestoreService";
 
@@ -50,6 +50,8 @@ const STORAGE_KEYS = {
   WAREHOUSES: 'cfo_warehouses',
   INVENTORY_ITEMS: 'cfo_inventory_items',
   STOCK_MOVEMENTS: 'cfo_stock_movements',
+  // Sales Funnels
+  SALES_FUNNELS: 'cfo_sales_funnels',
   // Integrations
   LAST_TELEGRAM_UPDATE_ID: 'cfo_last_telegram_update_id',
   ENABLE_TELEGRAM_IMPORT: 'cfo_enable_telegram_import',
@@ -115,6 +117,13 @@ export const storageService = {
   getEnableTelegramImport: (): boolean => getLocal(STORAGE_KEYS.ENABLE_TELEGRAM_IMPORT, false),
   setEnableTelegramImport: (enabled: boolean) => setLocal(STORAGE_KEYS.ENABLE_TELEGRAM_IMPORT, enabled),
 
+  // Sales Funnels Local Accessors
+  getSalesFunnels: (): SalesFunnel[] => {
+    const funnels = getLocal(STORAGE_KEYS.SALES_FUNNELS, []);
+    return funnels.filter(f => !f.isArchived);
+  },
+  setSalesFunnels: (funnels: SalesFunnel[]) => { setLocal(STORAGE_KEYS.SALES_FUNNELS, funnels); storageService.saveToCloud(); },
+
   loadFromCloud: async (force: boolean = false) => {
       try {
           // Если force=true (первая загрузка), всегда загружаем из облака
@@ -136,193 +145,100 @@ export const storageService = {
           let hasChanges = false;
           if (data) {
               
-              // Функция для умного слияния с приоритетом облачных данных
-              // При первой загрузке (force=true) - приоритет облаку
-              // При обычной синхронизации - приоритет более свежим данным
-              // ВАЖНО: Если элемент есть только в облаке, но его нет локально - это может быть:
-              // 1. Новый элемент из другого устройства (добавляем)
-              // 2. Удаленный элемент (не добавляем, если локальная версия была сохранена недавно)
-              const smartMergeByTimestamp = <T extends { id: string; updatedAt?: string; createdAt?: string }>(
-                  cloudData: T[], 
-                  localData: T[],
-                  force: boolean = false
-              ): { merged: T[], hasChanges: boolean } => {
-                  const localMap = new Map(localData.map(item => [item.id, item]));
-                  const cloudMap = new Map(cloudData.map(item => [item.id, item]));
-                  const merged: T[] = [];
-                  let hasChanges = false;
-                  
-                  // Собираем все уникальные ID
-                  const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
-                  
-                  // Получаем время последнего сохранения локальных данных
-                  // Если локальные данные были сохранены недавно (менее 30 секунд назад),
-                  // значит удаление было недавним и нужно его уважать
-                  const timeSinceLastSave = Date.now() - lastSaveTime;
-                  const recentLocalSave = timeSinceLastSave < 30000; // 30 секунд
-                  
-                  allIds.forEach(id => {
-                      const localItem = localMap.get(id);
-                      const cloudItem = cloudMap.get(id);
-                      
-                      if (localItem && cloudItem) {
-                          // Оба существуют - сравниваем по updatedAt или createdAt
-                          const localTime = localItem.updatedAt 
-                              ? new Date(localItem.updatedAt).getTime() 
-                              : (localItem.createdAt ? new Date(localItem.createdAt).getTime() : 0);
-                          const cloudTime = cloudItem.updatedAt 
-                              ? new Date(cloudItem.updatedAt).getTime() 
-                              : (cloudItem.createdAt ? new Date(cloudItem.createdAt).getTime() : 0);
-                          
-                          if (force) {
-                              // При первой загрузке - приоритет облаку (источник истины)
-                              // Но только если действительно есть различия
-                              const localStr = JSON.stringify(localItem);
-                              const cloudStr = JSON.stringify(cloudItem);
-                              if (localStr !== cloudStr) {
-                                  merged.push(cloudItem);
-                                  hasChanges = true;
-                              } else {
-                                  // Данные идентичны - оставляем локальную версию (не меняем)
-                                  merged.push(localItem);
-                              }
-                          } else if (cloudTime > localTime && cloudTime > 0 && (cloudTime - localTime) > 1000) {
-                              // Облачная версия новее (разница больше 1 секунды, чтобы избежать конфликтов)
-                              merged.push(cloudItem);
-                              hasChanges = true;
-                          } else if (localTime > cloudTime && localTime > 0 && (localTime - cloudTime) > 1000) {
-                              // Локальная версия новее (разница больше 1 секунды)
-                              merged.push(localItem);
-                          } else {
-                              // Равны или разница меньше 1 секунды - оставляем локальную (не меняем без необходимости)
-                              merged.push(localItem);
-                          }
-                      } else if (localItem) {
-                          // Только локальная версия - добавляем всегда (новые данные)
-                          merged.push(localItem);
-                      } else if (cloudItem) {
-                          // Только облачная версия
-                          // ВАЖНО: Если это не первая загрузка (force=false), и элемента нет локально,
-                          // значит он был удален локально - НЕ добавляем его обратно
-                          // Добавляем ТОЛЬКО при первой загрузке (force=true) или если локальные данные полностью пустые
-                          if (force || (localData.length === 0 && cloudData.length > 0)) {
-                              // Первая загрузка или локальные данные полностью пустые (первый запуск)
-                              // - добавляем из облака
-                              merged.push(cloudItem);
-                              hasChanges = true;
-                          }
-                          // Иначе пропускаем - элемент был удален локально и не должен возвращаться
-                          // Это предотвращает возврат удаленных элементов при синхронизации
-                      }
-                  });
-                  
-                  return { merged, hasChanges };
+              // Firebase - единственный источник истины
+              // Просто перезаписываем localStorage данными из Firebase
+              // Никаких слияний - Firebase всегда прав
+              // Фильтруем архивные элементы из Firebase (на всякий случай, хотя их там быть не должно)
+              const filterArchived = <T extends { isArchived?: boolean }>(items: T[]): T[] => {
+                  return items.filter(item => !item.isArchived);
               };
               
-              // Проверяем изменения в задачах (самое важное для синхронизации статусов)
-              if (data.tasks) {
-                  const normalizedTasks = normalizeArray(data.tasks);
-                  const currentTasks = getLocal(STORAGE_KEYS.TASKS, []);
-                  const { merged, hasChanges: tasksChanged } = smartMergeByTimestamp(normalizedTasks, currentTasks, force);
-                  
-                  // Обновляем только если действительно есть изменения
-                  if (tasksChanged) {
-                      setLocal(STORAGE_KEYS.TASKS, merged);
+              // Firebase - единственный источник истины, просто перезаписываем
+              if (data.tasks !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.tasks));
+                  const current = getLocal(STORAGE_KEYS.TASKS, []);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.TASKS, normalized);
                       hasChanges = true;
                   }
               }
               
               
-              if (data.users) {
-                  const normalized = normalizeArray(data.users);
-                  const current = getLocal(STORAGE_KEYS.USERS, []);
-                  
-                  // Удаляем дубликаты по логину (оставляем только последнего)
+              if (data.users !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.users));
+                  // Удаляем дубликаты по логину для пользователей (оставляем только последнего)
                   const removeDuplicatesByLogin = (users: User[]): User[] => {
                       const seen = new Map<string, User>();
-                      // Проходим в обратном порядке, чтобы оставить последнего
                       for (let i = users.length - 1; i >= 0; i--) {
                           const user = users[i];
                           if (user.login && !seen.has(user.login)) {
                               seen.set(user.login, user);
+                          } else if (!user.login && !seen.has(user.id)) {
+                              seen.set(user.id, user);
                           }
                       }
                       return Array.from(seen.values());
                   };
-                  
-                  // Сначала удаляем дубликаты из текущих локальных данных
-                  const deduplicatedCurrent = removeDuplicatesByLogin(current);
-                  
-                  // Используем умное слияние по timestamp
-                  const { merged, hasChanges: usersChanged } = smartMergeByTimestamp(normalized, deduplicatedCurrent, force);
-                  
-                  if (usersChanged) {
-                      // Еще раз удаляем дубликаты на всякий случай
-                      const finalUsers = removeDuplicatesByLogin(merged);
-                      setLocal(STORAGE_KEYS.USERS, finalUsers);
+                  const deduplicated = removeDuplicatesByLogin(normalized);
+                  const current = getLocal(STORAGE_KEYS.USERS, []);
+                  if (JSON.stringify(deduplicated) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.USERS, deduplicated);
                       hasChanges = true;
                   }
               }
-              if (data.projects) {
-                  const normalized = normalizeArray(data.projects);
+              if (data.projects !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.projects));
                   const current = getLocal(STORAGE_KEYS.PROJECTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.PROJECTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.PROJECTS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.tables) {
+              if (data.tables !== undefined) {
                   const normalized = normalizeArray(data.tables);
                   const current = getLocal(STORAGE_KEYS.TABLES, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.TABLES, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.TABLES, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.docs) {
-                  const normalized = normalizeArray(data.docs);
+              if (data.docs !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.docs));
                   const current = getLocal(STORAGE_KEYS.DOCS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.DOCS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.DOCS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.folders) {
-                  const normalized = normalizeArray(data.folders);
+              if (data.folders !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.folders));
                   const current = getLocal(STORAGE_KEYS.FOLDERS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.FOLDERS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.FOLDERS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.meetings) {
-                  const normalized = normalizeArray(data.meetings);
+              if (data.meetings !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.meetings));
                   const current = getLocal(STORAGE_KEYS.MEETINGS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.MEETINGS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.MEETINGS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.contentPosts) {
-                  const normalized = normalizeArray(data.contentPosts);
+              if (data.contentPosts !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.contentPosts));
                   const current = getLocal(STORAGE_KEYS.CONTENT_POSTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.CONTENT_POSTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.CONTENT_POSTS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.activity) {
+              if (data.activity !== undefined) {
                   const normalized = normalizeArray(data.activity);
                   const current = getLocal(STORAGE_KEYS.ACTIVITY, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.ACTIVITY, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.ACTIVITY, normalized);
                       hasChanges = true;
                   }
               }
@@ -345,57 +261,51 @@ export const storageService = {
               }
               
               // CRM & Finance
-              if (data.clients) {
-                  const normalized = normalizeArray(data.clients);
+              if (data.clients !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.clients));
                   const current = getLocal(STORAGE_KEYS.CLIENTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.CLIENTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.CLIENTS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.contracts) {
-                  const normalized = normalizeArray(data.contracts);
+              if (data.contracts !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.contracts));
                   const current = getLocal(STORAGE_KEYS.CONTRACTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.CONTRACTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.CONTRACTS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.oneTimeDeals) {
-                  const normalized = normalizeArray(data.oneTimeDeals);
+              if (data.oneTimeDeals !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.oneTimeDeals));
                   const current = getLocal(STORAGE_KEYS.ONE_TIME_DEALS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.ONE_TIME_DEALS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.ONE_TIME_DEALS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.accountsReceivable) {
-                  const normalized = normalizeArray(data.accountsReceivable);
+              if (data.accountsReceivable !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.accountsReceivable));
                   const current = getLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.employeeInfos) {
-                  const normalized = normalizeArray(data.employeeInfos);
+              if (data.employeeInfos !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.employeeInfos));
                   const current = getLocal(STORAGE_KEYS.EMPLOYEE_INFOS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.EMPLOYEE_INFOS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.EMPLOYEE_INFOS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.deals) {
-                  const normalized = normalizeArray(data.deals);
+              if (data.deals !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.deals));
                   const current = getLocal(STORAGE_KEYS.DEALS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.DEALS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.DEALS, normalized);
                       hasChanges = true;
                   }
               }
@@ -409,41 +319,45 @@ export const storageService = {
               }
               
               // Finance
-              if (data.departments) {
+              if (data.departments !== undefined) {
                   const normalized = normalizeArray(data.departments);
                   const current = getLocal(STORAGE_KEYS.DEPARTMENTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.DEPARTMENTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.DEPARTMENTS, normalized);
                       hasChanges = true;
                   }
               }
 
               // Inventory
-              if (data.warehouses) {
+              if (data.warehouses !== undefined) {
                   const normalized = normalizeArray(data.warehouses);
                   const current = getLocal(STORAGE_KEYS.WAREHOUSES, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.WAREHOUSES, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.WAREHOUSES, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.inventoryItems) {
+              if (data.inventoryItems !== undefined) {
                   const normalized = normalizeArray(data.inventoryItems);
                   const current = getLocal(STORAGE_KEYS.INVENTORY_ITEMS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.INVENTORY_ITEMS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.INVENTORY_ITEMS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.stockMovements) {
+              if (data.stockMovements !== undefined) {
                   const normalized = normalizeArray(data.stockMovements);
                   const current = getLocal(STORAGE_KEYS.STOCK_MOVEMENTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.STOCK_MOVEMENTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.STOCK_MOVEMENTS, normalized);
+                      hasChanges = true;
+                  }
+              }
+              if (data.salesFunnels !== undefined) {
+                  const normalized = filterArchived(normalizeArray(data.salesFunnels));
+                  const current = filterArchived(getLocal(STORAGE_KEYS.SALES_FUNNELS, []));
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.SALES_FUNNELS, normalized);
                       hasChanges = true;
                   }
               }
@@ -463,63 +377,57 @@ export const storageService = {
                       hasChanges = true;
                   }
               }
-              if (data.purchaseRequests) {
+              if (data.purchaseRequests !== undefined) {
                   const normalized = normalizeArray(data.purchaseRequests);
                   const current = getLocal(STORAGE_KEYS.PURCHASE_REQUESTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.PURCHASE_REQUESTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.PURCHASE_REQUESTS, normalized);
                       hasChanges = true;
                   }
               }
               // BPM
-              if (data.orgPositions) {
+              if (data.orgPositions !== undefined) {
                   const normalized = normalizeArray(data.orgPositions);
                   const current = getLocal(STORAGE_KEYS.ORG_POSITIONS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.ORG_POSITIONS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.ORG_POSITIONS, normalized);
                       hasChanges = true;
                   }
               }
-              if (data.businessProcesses) {
+              if (data.businessProcesses !== undefined) {
                   const normalized = normalizeArray(data.businessProcesses);
                   const current = getLocal(STORAGE_KEYS.BUSINESS_PROCESSES, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.BUSINESS_PROCESSES, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.BUSINESS_PROCESSES, normalized);
                       hasChanges = true;
                   }
               }
               // Automation
-              if (data.automationRules) {
+              if (data.automationRules !== undefined) {
                   const normalized = normalizeArray(data.automationRules);
                   const current = getLocal(STORAGE_KEYS.AUTOMATION_RULES, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.AUTOMATION_RULES, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.AUTOMATION_RULES, normalized);
                       hasChanges = true;
                   }
               }
               
               // Financial Plan Documents
-              if (data.financialPlanDocuments) {
+              if (data.financialPlanDocuments !== undefined) {
                   const normalized = normalizeArray(data.financialPlanDocuments);
                   const current = getLocal(STORAGE_KEYS.FINANCIAL_PLAN_DOCUMENTS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.FINANCIAL_PLAN_DOCUMENTS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.FINANCIAL_PLAN_DOCUMENTS, normalized);
                       hasChanges = true;
                   }
               }
               
               // Financial Plannings
-              if (data.financialPlannings) {
+              if (data.financialPlannings !== undefined) {
                   const normalized = normalizeArray(data.financialPlannings);
                   const current = getLocal(STORAGE_KEYS.FINANCIAL_PLANNINGS, []);
-                  const { merged, hasChanges: changed } = smartMergeByTimestamp(normalized, current, force);
-                  if (changed) {
-                      setLocal(STORAGE_KEYS.FINANCIAL_PLANNINGS, merged);
+                  if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+                      setLocal(STORAGE_KEYS.FINANCIAL_PLANNINGS, normalized);
                       hasChanges = true;
                   }
               }
@@ -533,30 +441,40 @@ export const storageService = {
   },
 
   saveToCloud: async () => {
+      // Фильтруем архивные элементы перед сохранением в Firebase
+      // Архивные элементы НЕ сохраняются в Firebase - они удаляются навсегда
+      const filterArchived = <T extends { isArchived?: boolean }>(items: T[]): T[] => {
+          return items.filter(item => !item.isArchived);
+      };
+      
+      // Получаем актуальные данные из localStorage
+      // batch.set() с merge: false полностью перезаписывает документ,
+      // что гарантирует, что все поля из локальных данных сохранятся в Firebase
+      // Это обновит старые записи в Firebase, добавив им все новые поля
       const fullState = {
-          users: getLocal(STORAGE_KEYS.USERS, []),
-          tasks: getLocal(STORAGE_KEYS.TASKS, []),
-          projects: getLocal(STORAGE_KEYS.PROJECTS, []),
-          tables: getLocal(STORAGE_KEYS.TABLES, []),
-          docs: getLocal(STORAGE_KEYS.DOCS, []),
-          folders: getLocal(STORAGE_KEYS.FOLDERS, []),
-          meetings: getLocal(STORAGE_KEYS.MEETINGS, []),
-          contentPosts: getLocal(STORAGE_KEYS.CONTENT_POSTS, []),
-          activity: getLocal(STORAGE_KEYS.ACTIVITY, []),
+          users: filterArchived(getLocal(STORAGE_KEYS.USERS, [])),
+          tasks: filterArchived(getLocal(STORAGE_KEYS.TASKS, [])),
+          projects: filterArchived(getLocal(STORAGE_KEYS.PROJECTS, [])),
+          tables: getLocal(STORAGE_KEYS.TABLES, []), // Таблицы не имеют isArchived
+          docs: filterArchived(getLocal(STORAGE_KEYS.DOCS, [])),
+          folders: filterArchived(getLocal(STORAGE_KEYS.FOLDERS, [])),
+          meetings: filterArchived(getLocal(STORAGE_KEYS.MEETINGS, [])),
+          contentPosts: filterArchived(getLocal(STORAGE_KEYS.CONTENT_POSTS, [])),
+          activity: getLocal(STORAGE_KEYS.ACTIVITY, []), // Логи не имеют isArchived
           statuses: getLocal(STORAGE_KEYS.STATUSES, DEFAULT_STATUSES),
           priorities: getLocal(STORAGE_KEYS.PRIORITIES, DEFAULT_PRIORITIES),
-          clients: getLocal(STORAGE_KEYS.CLIENTS, []),
-          contracts: getLocal(STORAGE_KEYS.CONTRACTS, []),
-          oneTimeDeals: getLocal(STORAGE_KEYS.ONE_TIME_DEALS, []),
-          accountsReceivable: getLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, []),
-          employeeInfos: getLocal(STORAGE_KEYS.EMPLOYEE_INFOS, []),
-          deals: getLocal(STORAGE_KEYS.DEALS, []),
+          clients: filterArchived(getLocal(STORAGE_KEYS.CLIENTS, [])),
+          contracts: filterArchived(getLocal(STORAGE_KEYS.CONTRACTS, [])),
+          oneTimeDeals: filterArchived(getLocal(STORAGE_KEYS.ONE_TIME_DEALS, [])),
+          accountsReceivable: filterArchived(getLocal(STORAGE_KEYS.ACCOUNTS_RECEIVABLE, [])),
+          employeeInfos: filterArchived(getLocal(STORAGE_KEYS.EMPLOYEE_INFOS, [])),
+          deals: filterArchived(getLocal(STORAGE_KEYS.DEALS, [])),
           notificationPrefs: getLocal(STORAGE_KEYS.NOTIFICATION_PREFS, DEFAULT_NOTIFICATION_PREFS),
           // Finance
-          departments: getLocal(STORAGE_KEYS.DEPARTMENTS, []),
+          departments: getLocal(STORAGE_KEYS.DEPARTMENTS, []), // Справочники не имеют isArchived
           financeCategories: getLocal(STORAGE_KEYS.FINANCE_CATEGORIES, DEFAULT_FINANCE_CATEGORIES),
           financePlan: getLocal(STORAGE_KEYS.FINANCE_PLAN, null),
-          purchaseRequests: getLocal(STORAGE_KEYS.PURCHASE_REQUESTS, []),
+          purchaseRequests: getLocal(STORAGE_KEYS.PURCHASE_REQUESTS, []), // Заявки не имеют isArchived
           financialPlanDocuments: getLocal(STORAGE_KEYS.FINANCIAL_PLAN_DOCUMENTS, []),
           financialPlannings: getLocal(STORAGE_KEYS.FINANCIAL_PLANNINGS, []),
           // BPM
@@ -568,6 +486,8 @@ export const storageService = {
           warehouses: getLocal(STORAGE_KEYS.WAREHOUSES, []),
           inventoryItems: getLocal(STORAGE_KEYS.INVENTORY_ITEMS, []),
           stockMovements: getLocal(STORAGE_KEYS.STOCK_MOVEMENTS, []),
+          // Sales Funnels
+          salesFunnels: filterArchived(getLocal(STORAGE_KEYS.SALES_FUNNELS, [])),
       };
 
       // Используем Firestore вместо Realtime Database

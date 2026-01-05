@@ -25,7 +25,8 @@ export const MeetingsModule: React.FC<MeetingsModuleProps> = ({
         tableId={table.id} 
         showAll={table.isSystem} 
         tables={tables} 
-        onSaveMeeting={actions.saveMeeting} 
+        onSaveMeeting={actions.saveMeeting}
+        onDeleteMeeting={actions.deleteMeeting}
         onUpdateSummary={actions.updateMeetingSummary} 
       />
     </div>

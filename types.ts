@@ -33,6 +33,7 @@ export interface User {
   telegram?: string;
   password?: string;
   mustChangePassword?: boolean;
+  isArchived?: boolean; // Архив (мягкое удаление)
 }
 
 export interface Client {
@@ -46,41 +47,44 @@ export interface Client {
   companyName?: string; // Название компании
   companyInfo?: string; // Информация о том, чем занимается компания
   notes?: string;
+  funnelId?: string; // ID воронки продаж
+  isArchived?: boolean; // Архив (мягкое удаление)
 }
 
-export interface Contract {
+// Объединенная сущность для договоров и продаж
+export interface Deal {
   id: string;
   clientId: string;
-  number: string; 
-  startDate: string;
-  endDate?: string;
-  amount: number;
-  currency: string; 
-  status: 'active' | 'completed' | 'pending';
-  paymentDay: number; 
-  services: string; 
-}
-
-export interface OneTimeDeal {
-  id: string;
-  clientId: string;
-  number?: string; // Номер сделки (опционально)
-  date: string; // Дата сделки
-  amount: number; // Сумма сделки
+  recurring: boolean; // true = договор с ежемесячными платежами, false = разовая услуга
+  number: string; // Номер договора/сделки
+  amount: number; // Сумма
   currency: string; // Валюта
+  status: 'pending' | 'paid' | 'overdue' | 'active' | 'completed'; // Статус
   description: string; // Описание услуги/товара
-  status: 'pending' | 'paid' | 'overdue'; // Статус оплаты
-  dueDate?: string; // Срок оплаты (если есть)
+  notes?: string; // Примечания
+  funnelId?: string; // ID воронки продаж
+  isArchived?: boolean; // Архив (мягкое удаление)
+  createdAt?: string; // ISO дата создания
+  updatedAt?: string; // ISO дата последнего обновления
+  // Общие поля
+  date?: string; // Дата сделки/договора
+  dueDate?: string; // Срок оплаты
   paidAmount?: number; // Оплаченная сумма
   paidDate?: string; // Дата оплаты
-  notes?: string; // Примечания
+  // Поля для договоров (recurring = true)
+  startDate?: string; // Дата начала договора
+  endDate?: string; // Дата окончания договора
+  paymentDay?: number; // День месяца для оплаты
 }
+
+// Алиасы для обратной совместимости (deprecated)
+export type Contract = Deal;
+export type OneTimeDeal = Deal;
 
 export interface AccountsReceivable {
   id: string;
   clientId: string;
-  dealId?: string; // ID разовой сделки
-  contractId?: string; // ID договора (если задолженность по договору)
+  dealId: string; // ID сделки (договора или продажи)
   amount: number; // Сумма задолженности
   currency: string; // Валюта
   dueDate: string; // Срок погашения
@@ -90,6 +94,7 @@ export interface AccountsReceivable {
   paidDate?: string; // Дата оплаты
   createdAt: string; // Дата создания записи
   updatedAt?: string; // Дата обновления
+  isArchived?: boolean; // Архив (мягкое удаление)
 }
 
 export interface Comment {
@@ -100,6 +105,42 @@ export interface Comment {
   type?: 'internal' | 'telegram_in' | 'telegram_out'; // New field for chat context
 }
 
+export interface FunnelStage {
+  id: string;
+  label: string;
+  color: string; // CSS color class (например, 'bg-gray-200 dark:bg-gray-700')
+}
+
+export interface InstagramSourceConfig {
+  enabled: boolean;
+  instagramAccountId?: string; // ID Instagram аккаунта из Meta
+  accessToken?: string; // Access Token для Meta Graph API
+  pageId?: string; // ID Facebook страницы, к которой привязан Instagram
+  lastSyncAt?: string; // Время последней синхронизации
+}
+
+export interface TelegramSourceConfig {
+  enabled: boolean;
+  botToken?: string; // Токен Telegram бота для этой воронки
+  webhookUrl?: string; // URL вебхука для получения сообщений
+  lastSyncAt?: string; // Время последней синхронизации
+}
+
+export interface FunnelSourceConfig {
+  instagram?: InstagramSourceConfig;
+  telegram?: TelegramSourceConfig;
+}
+
+export interface SalesFunnel {
+  id: string;
+  name: string; // Название воронки (направление бизнеса)
+  stages: FunnelStage[]; // Этапы воронки
+  sources?: FunnelSourceConfig; // Настройки источников для воронки
+  createdAt?: string;
+  updatedAt?: string;
+  isArchived?: boolean; // Архив
+}
+
 export interface Deal {
   id: string;
   title: string;
@@ -107,8 +148,9 @@ export interface Deal {
   contactName?: string; 
   amount: number;
   currency: string; 
-  stage: 'new' | 'qualification' | 'proposal' | 'negotiation' | 'won' | 'lost';
-  source?: 'instagram' | 'telegram' | 'site' | 'manual' | 'recommendation'; // Lead Source
+  stage: string; // ID этапа из воронки (больше не фиксированный тип)
+  funnelId?: string; // ID воронки, к которой относится сделка
+  source?: 'instagram' | 'telegram' | 'site' | 'manual' | 'recommendation' | 'vk'; // Lead Source
   telegramChatId?: string; // For chatting with lead
   telegramUsername?: string;
   assigneeId: string;
@@ -134,6 +176,7 @@ export interface EmployeeInfo {
   hireDate: string;
   birthDate?: string;
   // Поля salary и conditions удалены согласно ТЗ
+  isArchived?: boolean; // Архив (мягкое удаление)
 }
 
 // --- BPM TYPES ---
@@ -237,6 +280,7 @@ export interface Project {
   name: string;
   icon?: string;
   color?: string;
+  isArchived?: boolean; // Архив (мягкое удаление)
 }
 
 export interface TaskComment {
@@ -330,6 +374,7 @@ export interface TableCollection {
   icon: string;
   color?: string;
   isSystem?: boolean;
+  isArchived?: boolean; // Архив (мягкое удаление)
 }
 
 export interface Folder {
@@ -337,6 +382,7 @@ export interface Folder {
   tableId: string;
   name: string;
   parentFolderId?: string; // Поддержка вложенных папок
+  isArchived?: boolean; // Архив (мягкое удаление)
 }
 
 export interface Doc {

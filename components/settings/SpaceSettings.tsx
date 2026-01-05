@@ -170,6 +170,8 @@ export const SpaceSettings: React.FC<SpaceSettingsProps> = ({
               <div className="space-y-3">
                   {tables
                       .filter(table => {
+                          // Фильтруем архивные таблицы
+                          if (table.isArchived) return false;
                           // Фильтруем системные страницы - они больше не нужны
                           // Встречи, документы, контент-планы, беклог и функционал теперь хардкодные модули
                           const systemTypes = ['meetings', 'docs', 'content-plan', 'backlog', 'functionality'];

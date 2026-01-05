@@ -36,10 +36,10 @@ const BusinessProcessesView: React.FC<BusinessProcessesViewProps> = ({
   const [description, setDescription] = useState('');
   const [steps, setSteps] = useState<ProcessStep[]>([]);
 
-  // Получаем только последние версии процессов для отображения в списке
+  // Получаем только последние версии процессов для отображения в списке, исключаем архивные
   const uniqueProcesses = useMemo(() => {
     const processMap = new Map<string, BusinessProcess>();
-    processes.forEach(p => {
+    processes.filter(p => !p.isArchived).forEach(p => {
       const existing = processMap.get(p.id);
       if (!existing || (p.version || 1) > (existing.version || 1)) {
         processMap.set(p.id, p);

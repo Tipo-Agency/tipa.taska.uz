@@ -158,12 +158,15 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
       if (platform.length === 0) return alert("Выберите хотя бы одну площадку");
       if (!date) return alert("Выберите дату");
       
+      // Нормализуем дату - берем только часть до 'T' (YYYY-MM-DD)
+      const normalizedDate = date.split('T')[0];
+      
       const newPost: ContentPost = {
           id: editingPost ? editingPost.id : `cp-${Date.now()}`,
           tableId,
           topic,
           description: description || undefined,
-          date,
+          date: normalizedDate,
           platform,
           format,
           status,
@@ -424,7 +427,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                                             onClick={() => handleOpenEdit(post)}
                                             className={`absolute h-5 rounded-md border cursor-pointer transition-all shadow-sm flex items-center justify-center z-0 ${getStatusColor(post.status)}`}
                                             style={{ left: `${left}%`, width: `${width}%`, minWidth: '24px' }}
-                                            title={`${post.topic} (${post.date})`}
+                                            title={`${post.topic} (${new Date(post.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')})`}
                                         >
                                            <div className="w-1.5 h-1.5 rounded-full bg-current opacity-50"></div>
                                         </div>
@@ -486,7 +489,11 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                         dateString = `${currentYear}-${m}-${d}`;
                     }
 
-                    const dayPosts = day ? filteredPosts.filter(p => p.date === dateString) : [];
+                    const dayPosts = day ? filteredPosts.filter(p => {
+                        // Нормализуем дату поста - берем только часть до 'T' (YYYY-MM-DD)
+                        const postDate = p.date.split('T')[0];
+                        return postDate === dateString;
+                    }) : [];
 
                     return (
                         <div key={idx} className={`min-h-[100px] border-r border-b border-gray-100 dark:border-[#333] p-1 transition-colors ${!day ? 'bg-gray-50/30 dark:bg-[#151515]' : 'hover:bg-gray-50 dark:hover:bg-[#252525]'}`}>
@@ -581,7 +588,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                                 className={`p-3 rounded shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-md transition-all bg-white dark:bg-[#2b2b2b] border-gray-200 dark:border-[#3a3a3a]`}
                             >
                                 <div className="flex justify-between items-start mb-2">
-                                    <div className="text-[10px] font-bold opacity-60 text-gray-500">{post.date}</div>
+                                    <div className="text-[10px] font-bold opacity-60 text-gray-500">{new Date(post.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')}</div>
                                     {renderPlatformIcons(post.platform)}
                                 </div>
                                 <div className="font-medium text-sm text-gray-800 dark:text-gray-100 mb-2 line-clamp-2">{post.topic}</div>

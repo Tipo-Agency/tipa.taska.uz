@@ -42,6 +42,7 @@ export const SpaceModule: React.FC<SpaceModuleProps> = ({
 
   const filteredTasks: Task[] = useMemo(() => {
       return tasks.filter((t) => {
+          if (t.isArchived) return false;
           if (hideCompleted && t.status === 'Выполнено') return false;
           if (statusFilter !== 'all' && t.status !== statusFilter) return false;
           if (assigneeFilter !== 'all' && t.assigneeId !== assigneeFilter && !(t.assigneeIds && t.assigneeIds.includes(assigneeFilter))) {
@@ -393,7 +394,7 @@ export const SpaceModule: React.FC<SpaceModuleProps> = ({
             <div className="px-6 h-full flex flex-col min-h-0">
                 <MeetingsView 
                     meetings={meetings} users={users} tableId={activeTable.id} showAll={activeTable.isSystem} tables={tables} 
-                    onSaveMeeting={actions.saveMeeting} onUpdateSummary={actions.updateMeetingSummary} 
+                    onSaveMeeting={actions.saveMeeting} onDeleteMeeting={actions.deleteMeeting} onUpdateSummary={actions.updateMeetingSummary} 
                 />
             </div>
         );

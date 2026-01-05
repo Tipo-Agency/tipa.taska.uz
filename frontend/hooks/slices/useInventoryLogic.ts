@@ -3,9 +3,9 @@ import { Warehouse, InventoryItem, StockMovement, StockMovementType, StockBalanc
 import { api } from '../../../backend/api';
 
 export const useInventoryLogic = (showNotification: (msg: string) => void) => {
-  const [warehouses, setWarehouses] = useState<Warehouse[]>(api.inventory.getWarehouses());
-  const [items, setItems] = useState<InventoryItem[]>(api.inventory.getItems());
-  const [movements, setMovements] = useState<StockMovement[]>(api.inventory.getMovements());
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
 
   const recalcBalances = (movs: StockMovement[]): StockBalance[] => {
       const balancesMap = new Map<string, number>(); // key: `${warehouseId}_${itemId}`
@@ -43,7 +43,7 @@ export const useInventoryLogic = (showNotification: (msg: string) => void) => {
       return balances;
   };
 
-  const [balances, setBalances] = useState<StockBalance[]>(recalcBalances(api.inventory.getMovements()));
+  const [balances, setBalances] = useState<StockBalance[]>([]);
 
   // Пересчитываем балансы при изменении движений
   useEffect(() => {

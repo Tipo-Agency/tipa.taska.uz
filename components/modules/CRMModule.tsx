@@ -18,7 +18,7 @@ interface CRMModuleProps {
   autoOpenCreateModal?: boolean;
 }
 
-export const CRMModule: React.FC<CRMModuleProps> = ({ view, deals, clients, contracts, oneTimeDeals = [], accountsReceivable = [], users, projects, tasks, actions, autoOpenCreateModal = false }) => {
+export const CRMModule: React.FC<CRMModuleProps> = ({ view, deals, clients, contracts, oneTimeDeals = [], accountsReceivable = [], users, salesFunnels = [], projects, tasks, actions, autoOpenCreateModal = false }) => {
   if (view === 'sales-funnel') {
       return <SalesFunnelView 
         deals={deals} 
@@ -26,11 +26,13 @@ export const CRMModule: React.FC<CRMModuleProps> = ({ view, deals, clients, cont
         users={users}
         projects={projects}
         tasks={tasks}
+        salesFunnels={salesFunnels}
         onSaveDeal={actions.saveDeal} 
         onDeleteDeal={actions.deleteDeal}
         onCreateTask={actions.openTaskModal ? (task) => actions.openTaskModal(task) : undefined}
         onCreateClient={actions.saveClient}
         onOpenTask={actions.openTaskModal}
+        onOpenSettings={actions.openSettings ? () => actions.openSettings('sales-funnels') : undefined}
         autoOpenCreateModal={autoOpenCreateModal}
       />;
   }
@@ -41,6 +43,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({ view, deals, clients, cont
         contracts={contracts}
         oneTimeDeals={oneTimeDeals}
         accountsReceivable={accountsReceivable}
+        salesFunnels={salesFunnels}
         onSaveClient={actions.saveClient} 
         onDeleteClient={actions.deleteClient} 
         onSaveContract={actions.saveContract} 

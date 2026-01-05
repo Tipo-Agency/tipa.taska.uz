@@ -192,11 +192,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleDeleteUser = async (id: string) => {
-    const updatedUsers = users.filter(u => u.id !== id);
-    onUpdateUsers(updatedUsers);
-    // Сохраняем в Firestore
-    const { storageService } = await import('../services/storageService');
-    await storageService.saveToCloud();
+    if (id === currentUser?.id) {
+      alert('Нельзя удалить текущего пользователя');
+      return;
+    }
+    if (confirm('Удалить пользователя? Это действие нельзя отменить.')) {
+      const now = new Date().toISOString();
+      // Мягкое удаление: помечаем пользователя как архивного
+      const updatedUsers = users.map(u => {
+        if (u.id === id) {
+          return { ...u, isArchived: true, updatedAt: now };
+        }
+        return { ...u, updatedAt: u.updatedAt || now };
+      });
+      
+      onUpdateUsers(updatedUsers);
+      // onUpdateUsers уже вызывает api.users.updateAll, который сохраняет в облако через setUsers
+      // Но для надежности ждем еще одно сохранение
+      const { storageService } = await import('../services/storageService');
+      await storageService.saveToCloud();
+    }
   };
   const handleResetPassword = async (id: string) => {
       if(confirm('Сбросить пароль?')) {

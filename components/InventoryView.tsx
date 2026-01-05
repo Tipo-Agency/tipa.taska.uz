@@ -61,7 +61,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({
   const currentDepartment = departments.find(d => d.id === selectedDepartmentId) || null;
 
   const filteredWarehouses = useMemo(
-    () => warehouses.filter(w => (selectedDepartmentId ? w.departmentId === selectedDepartmentId : true)),
+    () => warehouses.filter(w => !w.isArchived && (selectedDepartmentId ? w.departmentId === selectedDepartmentId : true)),
     [warehouses, selectedDepartmentId]
   );
 
@@ -372,7 +372,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map(item => (
+                    {items.filter(item => !item.isArchived).map(item => (
                       <tr key={item.id} className="border-b border-gray-100 dark:border-[#333] last:border-0">
                         <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{item.sku}</td>
                         <td className="px-4 py-2 text-gray-800 dark:text-gray-100">{item.name}</td>
@@ -408,7 +408,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({
                   className="border border-gray-200 dark:border-[#333] rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-[#252525] text-gray-800 dark:text-gray-100 min-w-[160px]"
                 >
                   <option value="">Со склада</option>
-                  {warehouses.map(w => (
+                  {warehouses.filter(w => !w.isArchived).map(w => (
                     <option key={w.id} value={w.id}>
                       {w.name}
                     </option>
@@ -422,7 +422,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({
                   className="border border-gray-200 dark:border-[#333] rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-[#252525] text-gray-800 dark:text-gray-100 min-w-[160px]"
                 >
                   <option value="">На склад</option>
-                  {warehouses.map(w => (
+                  {warehouses.filter(w => !w.isArchived).map(w => (
                     <option key={w.id} value={w.id}>
                       {w.name}
                     </option>
@@ -435,11 +435,11 @@ const InventoryView: React.FC<InventoryViewProps> = ({
                 className="border border-gray-200 dark:border-[#333] rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-[#252525] text-gray-800 dark:text-gray-100 min-w-[200px]"
               >
                 <option value="">Номенклатура</option>
-                {items.map(i => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}
-                  </option>
-                ))}
+                  {items.filter(i => !i.isArchived).map(i => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                    </option>
+                  ))}
               </select>
               <input
                 value={movementQty}

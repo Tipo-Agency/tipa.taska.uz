@@ -8,6 +8,7 @@ import { tablesEndpoint, activityEndpoint, statusesEndpoint, prioritiesEndpoint,
 import { departmentsEndpoint, financeEndpoint } from "./endpoints/finance.endpoint";
 import { bpmEndpoint } from "./endpoints/bpm.endpoint";
 import { inventoryEndpoint } from "./endpoints/inventory.endpoint";
+import { funnelsEndpoint } from "./endpoints/funnels.endpoint";
 
 // The Unified "Backend" Interface
 export const api = {
@@ -41,4 +42,5 @@ export const api = {
   finance: financeEndpoint,
   bpm: bpmEndpoint,
   inventory: inventoryEndpoint,
+  funnels: funnelsEndpoint,
 };
