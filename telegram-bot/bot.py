@@ -48,6 +48,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Включаем детальное логирование для httpx (чтобы видеть ответы от Telegram API)
+logging.getLogger("httpx").setLevel(logging.DEBUG)
+
 # Включаем логирование для httpx (чтобы видеть запросы к Telegram API)
 logging.getLogger("httpx").setLevel(logging.INFO)
 
@@ -601,6 +604,7 @@ def main():
     async def log_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Логируем все обновления для отладки"""
         try:
+            logger.info(f"[UPDATE] ===== RECEIVED UPDATE (ID: {update.update_id}) =====")
             if update.message:
                 chat_type = "PRIVATE" if update.message.chat.type == "private" else f"GROUP ({update.message.chat.type})"
                 user_id = update.effective_user.id if update.effective_user else "N/A"
@@ -608,7 +612,7 @@ def main():
                 text = update.message.text or "N/A"
                 logger.info(f"[UPDATE] Message from user {user_id} (@{username}) in {chat_type}: {text}")
                 if text and text.startswith('/'):
-                    logger.info(f"[UPDATE] Command detected: {text}")
+                    logger.info(f"[UPDATE] ⚠️ COMMAND DETECTED: {text}")
             elif update.callback_query:
                 user_id = update.effective_user.id if update.effective_user else "N/A"
                 logger.info(f"[UPDATE] Callback query from {user_id}: {update.callback_query.data}")
@@ -617,12 +621,14 @@ def main():
                 logger.info(f"[UPDATE] Edited message from {user_id}")
             else:
                 logger.info(f"[UPDATE] Other update type: {type(update)}")
+            logger.info(f"[UPDATE] ===== END UPDATE =====")
         except Exception as e:
             logger.error(f"[UPDATE] Error logging update: {e}", exc_info=True)
     
-    # Добавляем обработчик для логирования всех обновлений ПЕРВЫМ (группа -1, самый низкий приоритет, но выполняется первым)
+    # Добавляем обработчик для логирования всех обновлений ПЕРВЫМ (группа -1)
     # Это гарантирует, что мы увидим все обновления ДО их обработки другими обработчиками
     application.add_handler(MessageHandler(filters.ALL, log_update), group=-1)
+    logger.info("[BOT] Logging handler registered in group -1 (will see ALL updates)")
     
     # ConversationHandler для авторизации
     # Работает в приватных чатах (по умолчанию команды работают только в приватных чатах)
