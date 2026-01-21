@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Task, User, ActivityLog, Meeting, FinancePlan, PurchaseRequest, Deal, ContentPost, Role, EmployeeInfo } from '../types';
 import { CheckCircle2, Clock, Calendar, ArrowRight, Wallet, TrendingUp, Instagram, AlertCircle, Briefcase, Zap, Plus, X } from 'lucide-react';
+import { Button } from './ui';
 
 interface HomeViewProps {
   currentUser: User;
@@ -95,6 +96,28 @@ const HomeView: React.FC<HomeViewProps> = ({
     !['Выполнено', 'Done', 'Завершено'].includes(t.status) && 
     (t.assigneeId === currentUser?.id || t.assigneeIds?.includes(currentUser?.id))
   );
+  
+  // Задачи на сегодня - фильтруем по назначенным на текущего пользователя
+  const todayTasks = myTasks.filter(t =>
+    t &&
+    t.endDate &&
+    t.endDate === todayStr
+  ).sort((a, b) => {
+    // Сортировка: сначала просроченные, потом по приоритету, потом по дате
+    const aOverdue = new Date(a.endDate || '') < new Date(todayStr) && !['Выполнено', 'Done', 'Завершено'].includes(a.status);
+    const bOverdue = new Date(b.endDate || '') < new Date(todayStr) && !['Выполнено', 'Done', 'Завершено'].includes(b.status);
+
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+
+    const priorityOrder = { 'Высокий': 1, 'Средний': 2, 'Низкий': 3 };
+    const aPriority = priorityOrder[a.priority as keyof typeof priorityOrder] || 4;
+    const bPriority = priorityOrder[b.priority as keyof typeof priorityOrder] || 4;
+
+    if (aPriority !== bPriority) return aPriority - bPriority;
+
+    return new Date(a.endDate || '').getTime() - new Date(b.endDate || '').getTime();
+  });
   
   // Сортируем: сначала задачи на сегодня, потом остальные
   const sortedTasks = myTasks.sort((a, b) => {
