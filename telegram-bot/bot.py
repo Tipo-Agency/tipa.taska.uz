@@ -49,12 +49,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Состояния для ConversationHandler
-(LOGIN, PASSWORD, 
- TASK_TITLE, TASK_DESCRIPTION, TASK_END_DATE,
- DEAL_TITLE, DEAL_CLIENT, DEAL_AMOUNT, DEAL_FUNNEL, DEAL_STAGE, DEAL_ASSIGNEE, DEAL_DESCRIPTION,
- CLIENT_NAME, CLIENT_COMPANY, CLIENT_PHONE, CLIENT_EMAIL,
- PASSWORD_OLD, PASSWORD_NEW, PASSWORD_CONFIRM,
- AVATAR_URL) = range(22)
+(LOGIN, PASSWORD) = range(2)
 
 # Хранилище сессий пользователей (в продакшене использовать Redis)
 user_sessions = {}  # {telegram_user_id: {user_id: str, last_check: datetime}}
