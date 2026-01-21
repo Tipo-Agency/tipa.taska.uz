@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, User, ActivityLog, Meeting, FinancePlan, PurchaseRequest, Deal, ContentPost, Role, EmployeeInfo } from '../types';
 import { CheckCircle2, Clock, Calendar, ArrowRight, Wallet, TrendingUp, Instagram, AlertCircle, Briefcase, Zap, Plus, X } from 'lucide-react';
 import { Button } from './ui';
+import { getTodayLocalDate, parseLocalDate, isOverdue } from '../utils/dateUtils';
 
 interface HomeViewProps {
   currentUser: User;
@@ -57,7 +58,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   const dayOfMonth = today.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
   const formattedDate = `${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dayOfMonth}`;
   
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = getTodayLocalDate();
   
   // Проверка дня рождения (локальное время устройства)
   useEffect(() => {
@@ -97,15 +98,18 @@ const HomeView: React.FC<HomeViewProps> = ({
     (t.assigneeId === currentUser?.id || t.assigneeIds?.includes(currentUser?.id))
   );
   
-  // Задачи на сегодня - фильтруем по назначенным на текущего пользователя
-  const todayTasks = myTasks.filter(t =>
-    t &&
-    t.endDate &&
-    t.endDate === todayStr
-  ).sort((a, b) => {
+  // Задачи на сегодня и просроченные - фильтруем по назначенным на текущего пользователя
+  const todayLocal = getTodayLocalDate();
+  
+  const todayTasks = myTasks.filter(t => {
+    if (!t || !t.endDate) return false;
+    
+    // Включаем задачи на сегодня и просроченные (дата <= сегодня)
+    return t.endDate <= todayLocal;
+  }).sort((a, b) => {
     // Сортировка: сначала просроченные, потом по приоритету, потом по дате
-    const aOverdue = new Date(a.endDate || '') < new Date(todayStr) && !['Выполнено', 'Done', 'Завершено'].includes(a.status);
-    const bOverdue = new Date(b.endDate || '') < new Date(todayStr) && !['Выполнено', 'Done', 'Завершено'].includes(b.status);
+    const aOverdue = isOverdue(a.endDate || '') && !['Выполнено', 'Done', 'Завершено'].includes(a.status);
+    const bOverdue = isOverdue(b.endDate || '') && !['Выполнено', 'Done', 'Завершено'].includes(b.status);
 
     if (aOverdue && !bOverdue) return -1;
     if (!aOverdue && bOverdue) return 1;
@@ -116,7 +120,9 @@ const HomeView: React.FC<HomeViewProps> = ({
 
     if (aPriority !== bPriority) return aPriority - bPriority;
 
-    return new Date(a.endDate || '').getTime() - new Date(b.endDate || '').getTime();
+    const aDate = parseLocalDate(a.endDate || '');
+    const bDate = parseLocalDate(b.endDate || '');
+    return aDate.getTime() - bDate.getTime();
   });
   
   // Сортируем: сначала задачи на сегодня, потом остальные
@@ -254,13 +260,19 @@ const HomeView: React.FC<HomeViewProps> = ({
                         <div className="p-8 text-center text-xs text-gray-400">Нет задач на сегодня</div>
                     ) : (
                         todayTasks.map(task => {
+                            const taskOverdue = isOverdue(task.endDate || '') && !['Выполнено', 'Done', 'Завершено'].includes(task.status);
+                            
                             const priorityColor = task.priority === 'Высокий' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 
                                                  task.priority === 'Средний' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' : 
                                                  'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+                            
                             return (
-                                <div key={task.id} onClick={() => onOpenTask(task)} className="p-3 rounded-lg border border-gray-200 dark:border-[#333] hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all cursor-pointer">
+                                <div key={task.id} onClick={() => onOpenTask(task)} className={`p-3 rounded-lg border ${taskOverdue ? 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/10' : 'border-gray-200 dark:border-[#333]'} hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all cursor-pointer`}>
                                     <div className="flex items-start justify-between gap-2 mb-2">
-                                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white flex-1">{task.title}</h4>
+                                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white flex-1">
+                                            {taskOverdue && <span className="text-red-600 dark:text-red-400 mr-1">⚠️</span>}
+                                            {task.title}
+                                        </h4>
                                         {task.priority && (
                                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${priorityColor}`}>
                                                 {task.priority}
@@ -269,6 +281,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                                     </div>
                                     <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                                         <span>{task.status}</span>
+                                        {taskOverdue && <span className="text-red-600 dark:text-red-400 font-semibold">• Просрочено</span>}
                                         {task.projectId && <span>• Проект</span>}
                                     </div>
                                 </div>

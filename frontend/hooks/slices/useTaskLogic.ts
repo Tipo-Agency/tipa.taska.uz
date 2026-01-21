@@ -150,8 +150,21 @@ export const useTaskLogic = (showNotification: (msg: string) => void, currentUse
             assigneeId: taskData.assigneeId || null,
             assigneeIds: taskData.assigneeIds || (taskData.assigneeId ? [taskData.assigneeId] : []),
             projectId: taskData.projectId || null,
-            startDate: taskData.startDate || new Date().toISOString().split('T')[0],
-            endDate: taskData.endDate || new Date().toISOString().split('T')[0], 
+            startDate: taskData.startDate || (() => {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            })(),
+            endDate: taskData.endDate || (() => {
+                const now = new Date();
+                now.setDate(now.getDate() + 7);
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            })(), 
             isArchived: false,
             description: taskData.description,
             comments: [],

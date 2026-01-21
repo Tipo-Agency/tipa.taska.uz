@@ -5,6 +5,7 @@ import { X, Calendar as CalendarIcon, Users, Tag, Plus, CheckCircle2, Archive, A
 import { DynamicIcon } from './AppIcons';
 import { STANDARD_CATEGORIES } from './FunctionalityView';
 import { FilePreviewModal } from './FilePreviewModal';
+import { getTodayLocalDate, getDateDaysFromNow } from '../utils/dateUtils';
 
 interface TaskModalProps {
   users: User[];
@@ -52,8 +53,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const [projectId, setProjectId] = useState<string>(projects[0]?.id || '');
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(getTodayLocalDate());
+  const [endDate, setEndDate] = useState(getDateDaysFromNow(7));
   const [status, setStatus] = useState<string>(statuses[0]?.name || '');
   const [contentPostId, setContentPostId] = useState<string | undefined>(undefined);
   const [category, setCategory] = useState<string>('');
@@ -101,8 +102,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
         const newProjectId = currentTask.projectId || '';
         const newAssigneeId = currentTask.assigneeId || '';
         const newAssigneeIds = currentTask.assigneeIds || (currentTask.assigneeId ? [currentTask.assigneeId] : []);
-        const newStartDate = currentTask.startDate || new Date().toISOString().split('T')[0];
-        const newEndDate = currentTask.endDate || new Date().toISOString().split('T')[0];
+        const newStartDate = currentTask.startDate || getTodayLocalDate();
+        const newEndDate = currentTask.endDate || getDateDaysFromNow(7);
         const newStatus = currentTask.status || statuses[0]?.name || '';
         const newCategory = currentTask.category || '';
         
@@ -141,8 +142,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
         const newStatus = currentTask.status || statuses[0]?.name || '';
         const newPriority = currentTask.priority || priorities[0]?.name || '';
         const newProjectId = currentTask.projectId || '';
-        const newStartDate = currentTask.startDate || new Date().toISOString().split('T')[0];
-        const newEndDate = currentTask.endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const newStartDate = currentTask.startDate || getTodayLocalDate();
+        const newEndDate = currentTask.endDate || getDateDaysFromNow(7);
         const newCategory = currentTask.category || '';
         
         setTitle(newTitle);
@@ -189,8 +190,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
           projectId: '',
           assigneeId: currentUser.id,
           assigneeIds: [currentUser.id],
-          startDate: new Date().toISOString().split('T')[0],
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          startDate: getTodayLocalDate(),
+          endDate: getDateDaysFromNow(7),
           status: statuses[0]?.name || '',
           category: ''
         };
