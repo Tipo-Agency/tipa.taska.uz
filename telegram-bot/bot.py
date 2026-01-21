@@ -708,6 +708,28 @@ def main():
     try:
         logger.info("[BOT] Starting polling...")
         logger.info("[BOT] If you send /start to the bot, you should see [UPDATE] messages in logs")
+        logger.info(f"[BOT] Polling config: allowed_updates=ALL_TYPES, drop_pending=False, interval=1.0s, timeout=10s")
+        
+        # Проверяем, есть ли обновления в очереди ДО начала polling (синхронно)
+        async def check_updates_before_polling():
+            try:
+                bot_info = await application.bot.get_me()
+                logger.info(f"[BOT] Bot info: @{bot_info.username} (ID: {bot_info.id})")
+                
+                # Проверяем очередь обновлений
+                updates = await application.bot.get_updates(limit=1, timeout=1)
+                logger.info(f"[BOT] Updates in queue before polling: {len(updates)}")
+                if len(updates) > 0:
+                    logger.info(f"[BOT] First pending update ID: {updates[0].update_id}")
+            except Exception as e:
+                logger.warning(f"[BOT] Could not check updates before polling: {e}")
+        
+        # Запускаем проверку в отдельном event loop
+        try:
+            asyncio.run(check_updates_before_polling())
+        except Exception as e:
+            logger.warning(f"[BOT] Could not run pre-polling check: {e}")
+        
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=False,  # Обрабатываем все обновления
