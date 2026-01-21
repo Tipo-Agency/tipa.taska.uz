@@ -2,24 +2,45 @@
 
 Telegram бот для интеграции с системой управления задачами `tipa.taska.uz`.
 
+## ⚠️ Важно: Настройка Firebase
+
+**Для работы бота НУЖЕН Firebase Service Account (JSON файл с ключами).**
+
+📖 **Быстрая инструкция:** См. [QUICK_START.md](./QUICK_START.md)
+
+📖 **Подробная инструкция:** См. [SERVER_SETUP.md](./SERVER_SETUP.md)
+
 ## Установка
 
-1. Установите зависимости:
-```bash
-pip install -r requirements.txt
-```
+1. **Создайте Firebase Service Account:**
+   - Откройте [Firebase Console](https://console.firebase.google.com/)
+   - Выберите проект `tipa-task-manager`
+   - Project Settings → Service accounts → Generate new private key
+   - Скачайте JSON файл
 
-2. Создайте файл `.env` на основе `.env.example`:
-```bash
-cp .env.example .env
-```
+2. **Загрузите файл на сервер:**
+   ```bash
+   scp ~/Downloads/tipa-task-manager-firebase-adminsdk-xxxxx.json user@server:/var/www/tipa.taska.uz/telegram-bot/firebase-credentials.json
+   ```
 
-3. Заполните переменные окружения в `.env`:
-- `TELEGRAM_BOT_TOKEN` - токен Telegram бота
-- `FIREBASE_PROJECT_ID` - ID проекта Firebase (по умолчанию `tipa-task-manager`)
-- `DEFAULT_TIMEZONE` - часовой пояс (по умолчанию `Asia/Tashkent`)
+3. **Создайте файл `.env`:**
+   ```bash
+   cd telegram-bot
+   nano .env
+   ```
+   
+   Добавьте:
+   ```env
+   TELEGRAM_BOT_TOKEN=8348357222:AAHzzrWFOE7n3MiGYKgugqXbUSehTW1-D1c
+   FIREBASE_PROJECT_ID=tipa-task-manager
+   FIREBASE_CREDENTIALS_PATH=/var/www/tipa.taska.uz/telegram-bot/firebase-credentials.json
+   DEFAULT_TIMEZONE=Asia/Tashkent
+   ```
 
-**Примечание:** Бот использует Firebase REST API, поэтому не требуется credentials файл. Убедитесь, что правила безопасности Firestore разрешают чтение/запись для нужных коллекций.
+4. **Установите зависимости:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 ## Запуск
 
@@ -93,4 +114,8 @@ sudo journalctl -u telegram-bot -f
 
 ## Документация
 
-Подробное техническое задание находится в файле `../docs/TELEGRAM_BOT_TZ.md`.
+- **[FIREBASE_SERVICE_ACCOUNT_SETUP.md](./FIREBASE_SERVICE_ACCOUNT_SETUP.md)** ⭐ - **Подробная пошаговая инструкция по настройке Service Account** (начните отсюда!)
+- **[QUICK_START.md](./QUICK_START.md)** - Быстрая инструкция по настройке (если бот не отвечает)
+- **[SERVER_SETUP.md](./SERVER_SETUP.md)** - Подробная инструкция по установке на сервере
+- **[FIREBASE_SETUP.md](./FIREBASE_SETUP.md)** - Настройка Firebase (REST API vs Admin SDK)
+- **[../docs/TELEGRAM_BOT_TZ.md](../docs/TELEGRAM_BOT_TZ.md)** - Техническое задание

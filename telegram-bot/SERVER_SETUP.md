@@ -27,7 +27,36 @@ sudo apt update
 sudo apt install python3 python3-venv python3-pip
 ```
 
-### 4. Создайте файл `.env` для бота
+### 4. Настройте Firebase Service Account (ОБЯЗАТЕЛЬНО!)
+
+**Для работы бота НУЖЕН service account от Firebase.** Это специальный JSON файл с ключами доступа.
+
+#### Шаг 4.1: Создайте Service Account
+
+1. Откройте [Firebase Console](https://console.firebase.google.com/)
+2. Выберите проект **tipa-task-manager**
+3. Нажмите на ⚙️ (шестеренку) → **Project Settings**
+4. Перейдите на вкладку **Service accounts**
+5. Нажмите **"Generate new private key"**
+6. Скачайте JSON файл (например, `tipa-task-manager-firebase-adminsdk-xxxxx.json`)
+
+#### Шаг 4.2: Загрузите файл на сервер
+
+```bash
+# С вашего компьютера (замените путь и имя файла)
+scp ~/Downloads/tipa-task-manager-firebase-adminsdk-xxxxx.json user@your-server:/var/www/tipa.taska.uz/telegram-bot/firebase-credentials.json
+```
+
+Или загрузите через SFTP/FTP клиент в директорию `/var/www/tipa.taska.uz/telegram-bot/`
+
+#### Шаг 4.3: Настройте права доступа
+
+```bash
+cd /var/www/tipa.taska.uz/telegram-bot
+chmod 600 firebase-credentials.json  # Только владелец может читать
+```
+
+### 5. Создайте файл `.env` для бота
 
 ```bash
 cd telegram-bot
@@ -38,15 +67,15 @@ nano .env
 ```env
 TELEGRAM_BOT_TOKEN=8348357222:AAHzzrWFOE7n3MiGYKgugqXbUSehTW1-D1c
 FIREBASE_PROJECT_ID=tipa-task-manager
+FIREBASE_CREDENTIALS_PATH=/var/www/tipa.taska.uz/telegram-bot/firebase-credentials.json
 DEFAULT_TIMEZONE=Asia/Tashkent
 ```
 
-**Важно:** Если вы используете Firebase Admin SDK (не REST API), укажите путь к credentials файлу:
-```env
-FIREBASE_CREDENTIALS_PATH=/path/to/firebase-credentials.json
-```
+**Важно:** 
+- `FIREBASE_CREDENTIALS_PATH` - это путь к JSON файлу service account, который вы скачали
+- Без этого файла бот не сможет читать данные из Firebase
 
-### 5. Исправьте проблему с Git ownership (если нужно)
+### 6. Исправьте проблему с Git ownership (если нужно)
 
 ```bash
 cd /var/www/taska  # путь к репозиторию
@@ -58,7 +87,7 @@ git config --global --add safe.directory /var/www/taska
 sudo ./telegram-bot/fix-git-ownership.sh /var/www/taska
 ```
 
-### 6. Запустите деплой бота
+### 7. Запустите деплой бота
 
 ```bash
 cd telegram-bot
@@ -72,13 +101,13 @@ sudo ./deploy.sh
 - Создаст systemd service
 - Запустит бота
 
-### 7. Проверьте статус бота
+### 8. Проверьте статус бота
 
 ```bash
 sudo systemctl status telegram-bot
 ```
 
-### 8. Просмотр логов (если нужно)
+### 9. Просмотр логов (если нужно)
 
 ```bash
 # Просмотр логов в реальном времени
@@ -93,6 +122,9 @@ sudo journalctl -u telegram-bot -n 50
 ### Команды для управления сервисом:
 
 ```bash
+# Проверить статус бота
+sudo systemctl status telegram-bot
+
 # Запустить бота
 sudo systemctl start telegram-bot
 
@@ -102,15 +134,20 @@ sudo systemctl stop telegram-bot
 # Перезапустить бота
 sudo systemctl restart telegram-bot
 
-# Проверить статус
-sudo systemctl status telegram-bot
-
 # Включить автозапуск при загрузке системы
 sudo systemctl enable telegram-bot
 
 # Отключить автозапуск
 sudo systemctl disable telegram-bot
+
+# Просмотр логов в реальном времени
+sudo journalctl -u telegram-bot -f
+
+# Последние 50 строк логов
+sudo journalctl -u telegram-bot -n 50
 ```
+
+**Примечание:** Символ `●` в выводе `systemctl status` - это просто индикатор статуса, не часть команды. Выполняйте команды без него.
 
 ## Автоматический деплой
 
@@ -167,36 +204,53 @@ python bot.py
 
    **Ошибка с Firebase (403/401 - доступ запрещен):**
    
-   Если бот не может читать данные из Firebase (ошибки 403/401), нужно создать сервисный аккаунт:
+   Если бот не может читать данные из Firebase (ошибки 403/401), **используйте Firebase Admin SDK с service account**:
    
    1. **Создайте сервисный аккаунт в Firebase Console:**
       - Откройте https://console.firebase.google.com/
       - Выберите проект `tipa-task-manager`
-      - Перейдите в "Project Settings" (⚙️) → "Service accounts"
+      - Перейдите в "Project Settings" (⚙️) → вкладка "Service accounts"
       - Нажмите "Generate new private key"
-      - Скачайте JSON файл с credentials
+      - Скачайте JSON файл с credentials (например, `tipa-task-manager-firebase-adminsdk-xxxxx.json`)
    
    2. **Загрузите файл на сервер:**
       ```bash
-      # Загрузите файл на сервер (например, через scp)
-      scp path/to/service-account-key.json user@server:/var/www/tipa.taska.uz/telegram-bot/
+      # С вашего компьютера (замените путь и имя файла)
+      scp ~/Downloads/tipa-task-manager-firebase-adminsdk-xxxxx.json user@server:/var/www/tipa.taska.uz/telegram-bot/firebase-credentials.json
       ```
    
-   3. **Укажите путь в .env:**
+      Или загрузите файл через SFTP/FTP клиент в директорию `/var/www/tipa.taska.uz/telegram-bot/`
+   
+   3. **Настройте права доступа:**
+      ```bash
+      cd /var/www/tipa.taska.uz/telegram-bot
+      chmod 600 firebase-credentials.json  # Только владелец может читать
+      ```
+   
+   4. **Обновите .env файл:**
       ```bash
       cd /var/www/tipa.taska.uz/telegram-bot
       nano .env
       ```
       Добавьте:
       ```env
-      FIREBASE_CREDENTIALS_PATH=/var/www/tipa.taska.uz/telegram-bot/service-account-key.json
+      FIREBASE_CREDENTIALS_PATH=/var/www/tipa.taska.uz/telegram-bot/firebase-credentials.json
       ```
    
-   4. **Обновите firebase_client.py для использования Admin SDK:**
-      - Замените REST API на Firebase Admin SDK
-      - Или используйте гибридный подход (Admin SDK для записи, REST API для чтения)
+   5. **Установите firebase-admin:**
+      ```bash
+      cd /var/www/tipa.taska.uz/telegram-bot
+      source venv/bin/activate
+      pip install firebase-admin
+      ```
    
-   **Альтернатива:** Если правила безопасности Firestore разрешают публичный доступ к нужным коллекциям, REST API должен работать без credentials.
+   6. **Перезапустите бота:**
+      ```bash
+      sudo systemctl restart telegram-bot
+      sudo journalctl -u telegram-bot -f
+      ```
+   
+   Бот автоматически переключится на Admin SDK, если найдет файл credentials.
 
    **Ошибка "Token is invalid":**
    - Проверьте токен бота в `.env`

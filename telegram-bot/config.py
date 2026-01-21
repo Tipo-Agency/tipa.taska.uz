@@ -12,6 +12,7 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8348357222:AAHzzrWFOE7n3Mi
 # Firebase конфигурация
 FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID', 'tipa-task-manager')
 FIREBASE_CREDENTIALS_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH', '')
+FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY', '')
 
 # Часовой пояс по умолчанию
 DEFAULT_TIMEZONE = os.getenv('DEFAULT_TIMEZONE', 'Asia/Tashkent')
