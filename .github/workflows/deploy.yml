@@ -33,8 +33,11 @@ jobs:
             echo "🤖 Deploying Telegram bot..."
             if [ -d "telegram-bot" ]; then
               cd telegram-bot
+              echo "📁 Current directory: $(pwd)"
+              echo "📝 Bot files updated via git, now installing dependencies and restarting service..."
               chmod +x deploy.sh
               # Запускаем с sudo для systemd операций
+              # Код уже обновлен через git reset --hard origin/main выше
               sudo ./deploy.sh || echo "⚠️ Telegram bot deployment failed, but continuing..."
               cd ..
             else

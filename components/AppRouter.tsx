@@ -246,7 +246,8 @@ export const AppRouter: React.FC<AppRouterProps> = (props) => {
       return <HRModule 
           view={view} 
           employees={props.employeeInfos} 
-          users={props.users} 
+          users={props.users}
+          currentUser={props.currentUser} 
           departments={props.departments} 
           orgPositions={props.orgPositions} 
           processes={props.businessProcesses}

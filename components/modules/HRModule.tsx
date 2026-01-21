@@ -14,11 +14,12 @@ interface HRModuleProps {
   processes: BusinessProcess[];
   tasks?: Task[];
   tables?: TableCollection[];
+  currentUser?: User | null;
   actions: any;
   autoOpenCreateModal?: boolean;
 }
 
-export const HRModule: React.FC<HRModuleProps> = ({ view, employees, users, departments, orgPositions, processes, tasks = [], tables = [], actions, autoOpenCreateModal = false }) => {
+export const HRModule: React.FC<HRModuleProps> = ({ view, employees, users, departments, orgPositions, processes, tasks = [], tables = [], currentUser, actions, autoOpenCreateModal = false }) => {
     if (view === 'employees') {
         return <EmployeesView employees={employees} users={users} departments={departments} orgPositions={orgPositions} onSave={actions.saveEmployee} onDelete={actions.deleteEmployee} onSavePosition={actions.savePosition} onDeletePosition={actions.deletePosition} />;
     }

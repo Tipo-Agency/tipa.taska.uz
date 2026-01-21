@@ -588,6 +588,7 @@ def main():
                 pass
     
     # ConversationHandler для авторизации
+    # Работает в приватных чатах (по умолчанию команды работают только в приватных чатах)
     auth_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -604,6 +605,29 @@ def main():
     
     # Регистрируем обработчик ошибок
     application.add_error_handler(error_handler)
+    
+    # Обработчик всех обновлений для логирования (добавляем ПЕРЕД другими обработчиками)
+    async def log_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Логируем все обновления для отладки"""
+        try:
+            if update.message:
+                chat_type = "PRIVATE" if update.message.chat.type == "private" else f"GROUP ({update.message.chat.type})"
+                logger.info(f"[UPDATE] Message from user {update.effective_user.id} (@{update.effective_user.username or 'N/A'}) in {chat_type}: {update.message.text or 'N/A'}")
+                if update.message.text and update.message.text.startswith('/'):
+                    logger.info(f"[UPDATE] Command detected: {update.message.text}")
+            elif update.callback_query:
+                logger.info(f"[UPDATE] Callback query from {update.effective_user.id}: {update.callback_query.data}")
+            elif update.edited_message:
+                logger.info(f"[UPDATE] Edited message from {update.effective_user.id}")
+            else:
+                logger.info(f"[UPDATE] Other update type: {type(update)}")
+        except Exception as e:
+            logger.error(f"[UPDATE] Error logging update: {e}")
+    
+    # Добавляем обработчик для логирования всех обновлений (группа 0, самый высокий приоритет)
+    application.add_handler(MessageHandler(filters.ALL, log_update), group=0)
+    
+    logger.info("[BOT] All handlers registered")
     
     # Обработчики callback_query
     application.add_handler(CallbackQueryHandler(menu_main, pattern='^menu_main$'))
@@ -631,6 +655,7 @@ def main():
     # Запускаем бота
     logger.info("Bot started")
     logger.info(f"[BOT] Starting polling with token: {config.TELEGRAM_BOT_TOKEN[:10]}...")
+    logger.info(f"[BOT] Polling mode: allowed_updates={Update.ALL_TYPES}, drop_pending_updates=False")
     application.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=False  # Обрабатываем все обновления

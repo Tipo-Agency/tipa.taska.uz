@@ -1,6 +1,7 @@
 #!/bin/bash
 # Скрипт для деплоя Telegram бота
 # Использование: sudo ./deploy.sh
+# Примечание: Код уже обновлен через git в основном workflow, этот скрипт только устанавливает зависимости и перезапускает сервис
 
 # Не завершаем при ошибках в некоторых местах (чтобы не блокировать деплой фронтенда)
 set +e
@@ -10,6 +11,7 @@ VENV_DIR="$BOT_DIR/venv"
 SERVICE_NAME="telegram-bot"
 
 echo "🚀 Starting Telegram bot deployment..."
+echo "📁 Bot directory: $BOT_DIR"
 
 # Проверяем наличие Python
 set -e
@@ -52,6 +54,7 @@ fi
 if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
     echo "🛑 Stopping existing service..."
     sudo systemctl stop "$SERVICE_NAME" || true
+    sleep 2  # Даем время сервису остановиться
 fi
 
 # Определяем пользователя для сервиса
@@ -100,11 +103,18 @@ if systemctl is-active --quiet "$SERVICE_NAME"; then
     echo "✅ Telegram bot deployed and running successfully!"
     echo "📊 Service status:"
     sudo systemctl status "$SERVICE_NAME" --no-pager -l | head -15 || true
+    echo ""
+    echo "📝 Recent logs (last 10 lines):"
+    sudo journalctl -u "$SERVICE_NAME" -n 10 --no-pager || true
 else
     echo "⚠️ Service may not be running. Checking logs:"
     sudo journalctl -u "$SERVICE_NAME" -n 20 --no-pager || true
+    echo ""
     echo "💡 You may need to check the service manually:"
     echo "   sudo systemctl status $SERVICE_NAME"
     echo "   sudo journalctl -u $SERVICE_NAME -f"
     # Не завершаем с ошибкой, чтобы не блокировать деплой фронтенда
 fi
+
+echo ""
+echo "✅ Telegram bot deployment script completed!"
