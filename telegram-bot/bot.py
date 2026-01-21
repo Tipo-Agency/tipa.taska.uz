@@ -59,64 +59,98 @@ user_states = {}  # {telegram_user_id: {state: str, data: dict}}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик команды /start"""
-    telegram_user_id = update.effective_user.id
-    
-    # Проверяем, авторизован ли пользователь
-    if telegram_user_id in user_sessions:
-        user_id = user_sessions[telegram_user_id]['user_id']
-        if check_user_active(user_id):
+    try:
+        telegram_user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name or "Unknown"
+        logger.info(f"[START] Command received from user {telegram_user_id} (@{username})")
+        
+        # Проверяем, авторизован ли пользователь
+        if telegram_user_id in user_sessions:
+            user_id = user_sessions[telegram_user_id]['user_id']
+            if check_user_active(user_id):
+                logger.info(f"[START] User {telegram_user_id} already authorized")
+                await update.message.reply_text(
+                    "Вы уже авторизованы! Используйте меню для навигации.",
+                    reply_markup=get_main_menu()
+                )
+                return ConversationHandler.END
+        
+        logger.info(f"[START] Starting authorization for user {telegram_user_id}")
+        await update.message.reply_text(
+            "Добро пожаловать в бот системы управления задачами!\n\n"
+            "Для начала работы необходимо авторизоваться.\n"
+            "Введите ваш логин:"
+        )
+        return LOGIN
+    except Exception as e:
+        logger.error(f"[START] Error in start handler: {e}", exc_info=True)
+        try:
             await update.message.reply_text(
-                "Вы уже авторизованы! Используйте меню для навигации.",
-                reply_markup=get_main_menu()
+                "Произошла ошибка при обработке команды. Попробуйте еще раз."
             )
-            return ConversationHandler.END
-    
-    await update.message.reply_text(
-        "Добро пожаловать в бот системы управления задачами!\n\n"
-        "Для начала работы необходимо авторизоваться.\n"
-        "Введите ваш логин:"
-    )
-    return LOGIN
+        except:
+            pass
+        return ConversationHandler.END
 
 async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик ввода логина"""
-    login_text = update.message.text.strip()
-    context.user_data['login'] = login_text
-    
-    await update.message.reply_text("Введите ваш пароль:")
-    return PASSWORD
+    try:
+        login_text = update.message.text.strip()
+        logger.info(f"[LOGIN] User {update.effective_user.id} entered login: {login_text[:3]}...")
+        context.user_data['login'] = login_text
+        
+        await update.message.reply_text("Введите ваш пароль:")
+        return PASSWORD
+    except Exception as e:
+        logger.error(f"[LOGIN] Error: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("Произошла ошибка. Попробуйте еще раз.")
+        except:
+            pass
+        return ConversationHandler.END
 
 async def password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик ввода пароля"""
-    password_text = update.message.text
-    login_text = context.user_data.get('login')
-    
-    # Аутентификация
-    user = authenticate_user(login_text, password_text)
-    
-    if user:
-        telegram_user_id = update.effective_user.id
-        user_sessions[telegram_user_id] = {
-            'user_id': user['id'],
-            'last_check': datetime.now()
-        }
+    try:
+        password_text = update.message.text
+        login_text = context.user_data.get('login')
+        logger.info(f"[PASSWORD] User {update.effective_user.id} attempting login: {login_text}")
         
-        # Сохраняем telegram_user_id в профиле пользователя
-        user['telegramUserId'] = str(telegram_user_id)
-        firebase.save('users', user)
+        # Аутентификация
+        user = authenticate_user(login_text, password_text)
         
-        await update.message.reply_text(
-            f"✅ Авторизация успешна!\n\n"
-            f"Добро пожаловать, {user.get('name', 'Пользователь')}!",
-            reply_markup=get_main_menu()
-        )
+        if user:
+            telegram_user_id = update.effective_user.id
+            user_sessions[telegram_user_id] = {
+                'user_id': user['id'],
+                'last_check': datetime.now()
+            }
+            
+            # Сохраняем telegram_user_id в профиле пользователя
+            user['telegramUserId'] = str(telegram_user_id)
+            firebase.save('users', user)
+            
+            logger.info(f"[PASSWORD] User {telegram_user_id} authenticated successfully as {user.get('name', 'Unknown')}")
+            await update.message.reply_text(
+                f"✅ Авторизация успешна!\n\n"
+                f"Добро пожаловать, {user.get('name', 'Пользователь')}!",
+                reply_markup=get_main_menu()
+            )
+            return ConversationHandler.END
+        else:
+            logger.warning(f"[PASSWORD] User {update.effective_user.id} failed authentication for login: {login_text}")
+            await update.message.reply_text(
+                "❌ Неверный логин или пароль. Попробуйте еще раз.\n"
+                "Используйте команду /start для повторной попытки."
+            )
+            return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"[PASSWORD] Error: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("Произошла ошибка при авторизации. Попробуйте еще раз.")
+        except:
+            pass
         return ConversationHandler.END
-    else:
-        await update.message.reply_text(
-            "❌ Неверный логин или пароль. Попробуйте еще раз.\n"
-            "Введите логин:"
-        )
-        return LOGIN
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /logout"""
@@ -538,7 +572,20 @@ async def periodic_check(context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Главная функция запуска бота"""
     # Создаем приложение
+    logger.info(f"[BOT] Initializing bot with token: {config.TELEGRAM_BOT_TOKEN[:10]}...")
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    
+    # Обработчик ошибок
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Обработчик ошибок"""
+        logger.error(f"[ERROR] Exception while handling an update: {context.error}", exc_info=context.error)
+        if isinstance(update, Update) and update.effective_message:
+            try:
+                await update.effective_message.reply_text(
+                    "Произошла ошибка при обработке вашего запроса. Попробуйте еще раз."
+                )
+            except:
+                pass
     
     # ConversationHandler для авторизации
     auth_handler = ConversationHandler(
@@ -554,6 +601,9 @@ def main():
     application.add_handler(auth_handler)
     application.add_handler(CommandHandler('logout', logout))
     application.add_handler(CommandHandler('help', help_command))
+    
+    # Регистрируем обработчик ошибок
+    application.add_error_handler(error_handler)
     
     # Обработчики callback_query
     application.add_handler(CallbackQueryHandler(menu_main, pattern='^menu_main$'))
@@ -580,7 +630,11 @@ def main():
     
     # Запускаем бота
     logger.info("Bot started")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info(f"[BOT] Starting polling with token: {config.TELEGRAM_BOT_TOKEN[:10]}...")
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=False  # Обрабатываем все обновления
+    )
 
 if __name__ == '__main__':
     main()

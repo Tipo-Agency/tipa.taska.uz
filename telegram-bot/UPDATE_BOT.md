@@ -77,10 +77,21 @@ sudo journalctl -u telegram-bot -n 50
 **Что должно быть в логах:**
 - ✅ `[Firebase] Using Admin SDK with service account` - бот использует Admin SDK
 - ✅ `[Firebase] Initialized with credentials from /var/www/...` - инициализация прошла успешно
+- ✅ `[BOT] Initializing bot with token: 8348357222...` - бот инициализируется с правильным токеном
+- ✅ `Bot started` - бот запущен
+- ✅ `[START] Command received from user ...` - когда пользователь отправляет `/start` (появится в логах)
 - ❌ НЕ должно быть ошибок `module 'firebase_admin.firestore' has no attribute 'Timestamp'`
 - ❌ НЕ должно быть ошибок `403 PERMISSION_DENIED`
 
-### Шаг 10: Проверьте работу бота в реальном времени
+### Шаг 9: Проверьте работу бота в реальном времени
+
+Откройте Telegram и отправьте боту команду `/start`. В логах должны появиться:
+- `[START] Command received from user ...`
+- `[START] Starting authorization for user ...`
+
+Если этих сообщений нет, значит бот не получает обновления от Telegram.
+
+### Шаг 10: Проверьте работу бота в Telegram
 
 ```bash
 sudo journalctl -u telegram-bot -f
@@ -151,8 +162,15 @@ sudo systemctl restart telegram-bot
 Если хотите сделать все быстро:
 
 ```bash
-cd /var/www/tipa.taska.uz && sudo systemctl stop telegram-bot && git pull origin main && sudo systemctl start telegram-bot && sudo systemctl status telegram-bot
+cd /var/www/tipa.taska.uz && sudo systemctl stop telegram-bot && git pull origin main && sudo systemctl start telegram-bot && sleep 3 && sudo systemctl status telegram-bot
 ```
+
+**Важно:** После обновления проверьте логи, чтобы убедиться, что бот получает команды:
+```bash
+sudo journalctl -u telegram-bot -f
+```
+
+Затем отправьте `/start` боту в Telegram и проверьте, появляются ли сообщения `[START]` в логах.
 
 ---
 
