@@ -58,20 +58,46 @@ if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
 fi
 
 # Определяем пользователя для сервиса
-# Если скрипт запущен через sudo, используем SUDO_USER
-# Иначе используем текущего пользователя
-SERVICE_USER=${SUDO_USER:-$USER}
-if [ -z "$SERVICE_USER" ] || [ "$SERVICE_USER" = "root" ]; then
-    # Если все еще root, пытаемся определить пользователя из переменной окружения деплоя
-    if [ -n "$DEPLOY_USER" ]; then
-        SERVICE_USER="$DEPLOY_USER"
-    else
-        # Пытаемся определить владельца директории проекта
-        SERVICE_USER=$(stat -c '%U' "$BOT_DIR/.." 2>/dev/null || echo "www-data")
+# Приоритет:
+# 1. DEPLOY_USER (передается из GitHub Actions)
+# 2. SUDO_USER (если запущено через sudo)
+# 3. Владелец директории проекта
+# 4. Текущий пользователь
+SERVICE_USER=""
+if [ -n "$DEPLOY_USER" ]; then
+    SERVICE_USER="$DEPLOY_USER"
+    echo "📋 Using DEPLOY_USER: $SERVICE_USER"
+elif [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    SERVICE_USER="$SUDO_USER"
+    echo "📋 Using SUDO_USER: $SERVICE_USER"
+else
+    # Пытаемся определить владельца директории проекта
+    if command -v stat >/dev/null 2>&1; then
+        if stat -c '%U' "$BOT_DIR/.." >/dev/null 2>&1; then
+            SERVICE_USER=$(stat -c '%U' "$BOT_DIR/..")
+        elif stat -f '%Su' "$BOT_DIR/.." >/dev/null 2>&1; then
+            SERVICE_USER=$(stat -f '%Su' "$BOT_DIR/..")
+        fi
     fi
+    
+    if [ -z "$SERVICE_USER" ] || [ "$SERVICE_USER" = "root" ]; then
+        # Последняя попытка - текущий пользователь (если не root)
+        if [ "$USER" != "root" ]; then
+            SERVICE_USER="$USER"
+        else
+            SERVICE_USER="www-data"
+        fi
+    fi
+    echo "📋 Detected service user: $SERVICE_USER"
 fi
 
-echo "📋 Service will run as user: $SERVICE_USER"
+# Убеждаемся, что пользователь существует
+if ! id "$SERVICE_USER" >/dev/null 2>&1; then
+    echo "⚠️ Warning: User $SERVICE_USER does not exist, using www-data"
+    SERVICE_USER="www-data"
+fi
+
+echo "✅ Service will run as user: $SERVICE_USER"
 
 # Создаем systemd service файл
 echo "📝 Creating/updating systemd service..."

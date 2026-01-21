@@ -19,13 +19,32 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.SERVER_PATH }}
+            echo "👤 Deploy user: $USER"
+            echo "📁 Server path: ${{ secrets.SERVER_PATH }}"
+            
+            # ИСПРАВЛЯЕМ ПРАВА НА ВСЮ ПАПКУ ПРОЕКТА
+            echo "🔧 Fixing ownership of entire project directory to deploy user ($USER)..."
+            # Меняем владельца всей папки на пользователя деплоя
+            sudo chown -R $USER:$USER ${{ secrets.SERVER_PATH }} || true
+            # Убеждаемся, что все файлы доступны для чтения/записи владельцу
+            sudo chmod -R u+rwX ${{ secrets.SERVER_PATH }} || true
+            # Git директория должна быть доступна
+            if [ -d "${{ secrets.SERVER_PATH }}/.git" ]; then
+              sudo chown -R $USER:$USER ${{ secrets.SERVER_PATH }}/.git || true
+              sudo chmod -R u+rwX ${{ secrets.SERVER_PATH }}/.git || true
+            fi
+            echo "✅ Ownership fixed for: ${{ secrets.SERVER_PATH }}"
+            
             # Fix Git ownership issue
             git config --global --add safe.directory ${{ secrets.SERVER_PATH }} || true
-            # Убеждаемся, что пользователь деплоя имеет права на репозиторий
-            sudo chown -R $USER:$USER ${{ secrets.SERVER_PATH }}/.git || true
+            
+            # Обновляем код
+            echo "📥 Fetching latest code..."
             git fetch origin
             git reset --hard origin/main
-            # Убеждаемся, что все файлы принадлежат пользователю деплоя
+            
+            # После обновления снова исправляем права (на случай если git создал файлы под другим пользователем)
+            echo "🔧 Fixing ownership after git update..."
             sudo chown -R $USER:$USER ${{ secrets.SERVER_PATH }} || true
             
             # Deploy frontend
@@ -38,11 +57,25 @@ jobs:
             if [ -d "telegram-bot" ]; then
               cd telegram-bot
               echo "📁 Current directory: $(pwd)"
+              echo "👤 Current user: $(whoami)"
+              echo "🔧 Fixing ownership of bot files to deploy user..."
+              # Исправляем права на файлы бота - они должны принадлежать пользователю деплоя
+              sudo chown -R $USER:$USER "$(pwd)" || true
+              # Убеждаемся, что .env файл доступен
+              if [ -f ".env" ]; then
+                sudo chown $USER:$USER .env || true
+                chmod 600 .env || true
+              fi
+              # Убеждаемся, что firebase-credentials.json доступен (если есть)
+              if [ -f "firebase-credentials.json" ]; then
+                sudo chown $USER:$USER firebase-credentials.json || true
+                chmod 600 firebase-credentials.json || true
+              fi
               echo "📝 Bot files updated via git, now installing dependencies and restarting service..."
               chmod +x deploy.sh
-              # Запускаем с sudo для systemd операций
+              # Запускаем с sudo для systemd операций, но передаем пользователя деплоя
               # Код уже обновлен через git reset --hard origin/main выше
-              sudo ./deploy.sh || echo "⚠️ Telegram bot deployment failed, but continuing..."
+              DEPLOY_USER=$USER sudo -E ./deploy.sh || echo "⚠️ Telegram bot deployment failed, but continuing..."
               cd ..
             else
               echo "⚠️ Telegram bot directory not found, skipping..."
