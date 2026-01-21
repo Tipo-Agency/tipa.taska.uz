@@ -346,7 +346,6 @@ export const useAppLogic = () => {
               ]);
               break;
           case 'tasks':
-          case 'table':
           case 'search':
           case 'analytics':
           case 'spaces':

@@ -58,3 +58,36 @@ export function isToday(dateStr: string): boolean {
 export function isOverdue(dateStr: string): boolean {
   return compareDates(dateStr, getTodayLocalDate()) < 0;
 }
+
+/**
+ * Форматировать дату для отображения
+ * @param dateStr - дата в формате YYYY-MM-DD или ISO строке
+ * @param format - формат даты (по умолчанию 'DD.MM.YYYY')
+ * @returns отформатированная дата
+ */
+export function formatDate(dateStr: string, format: string = 'DD.MM.YYYY'): string {
+  if (!dateStr) return '';
+  
+  let date: Date;
+  
+  // Если дата в формате YYYY-MM-DD
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    date = parseLocalDate(dateStr);
+  } else {
+    // Пытаемся распарсить как ISO строку
+    date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      return dateStr; // Возвращаем исходную строку, если не удалось распарсить
+    }
+  }
+  
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  
+  return format
+    .replace('DD', day)
+    .replace('MM', month)
+    .replace('YYYY', String(year))
+    .replace('YY', String(year).slice(-2));
+}
