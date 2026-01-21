@@ -48,6 +48,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Включаем логирование для httpx (чтобы видеть запросы к Telegram API)
+logging.getLogger("httpx").setLevel(logging.INFO)
+
 # Состояния для ConversationHandler
 (LOGIN, PASSWORD) = range(2)
 
@@ -571,9 +574,16 @@ async def periodic_check(context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Главная функция запуска бота"""
-    # Создаем приложение
+    # Версия кода для проверки обновлений
+    CODE_VERSION = "2026-01-21-v2"
+    
+    logger.info("=" * 60)
+    logger.info(f"[BOT] Starting bot - Code version: {CODE_VERSION}")
     logger.info(f"[BOT] Initializing bot with token: {config.TELEGRAM_BOT_TOKEN[:10]}...")
+    
+    # Создаем приложение
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    logger.info("[BOT] Application created successfully")
     
     # Обработчик ошибок
     async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -586,6 +596,33 @@ def main():
                 )
             except:
                 pass
+    
+    # Обработчик всех обновлений для логирования (добавляем ПЕРВЫМ, чтобы видеть все обновления)
+    async def log_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Логируем все обновления для отладки"""
+        try:
+            if update.message:
+                chat_type = "PRIVATE" if update.message.chat.type == "private" else f"GROUP ({update.message.chat.type})"
+                user_id = update.effective_user.id if update.effective_user else "N/A"
+                username = update.effective_user.username if update.effective_user and update.effective_user.username else "N/A"
+                text = update.message.text or "N/A"
+                logger.info(f"[UPDATE] Message from user {user_id} (@{username}) in {chat_type}: {text}")
+                if text and text.startswith('/'):
+                    logger.info(f"[UPDATE] Command detected: {text}")
+            elif update.callback_query:
+                user_id = update.effective_user.id if update.effective_user else "N/A"
+                logger.info(f"[UPDATE] Callback query from {user_id}: {update.callback_query.data}")
+            elif update.edited_message:
+                user_id = update.effective_user.id if update.effective_user else "N/A"
+                logger.info(f"[UPDATE] Edited message from {user_id}")
+            else:
+                logger.info(f"[UPDATE] Other update type: {type(update)}")
+        except Exception as e:
+            logger.error(f"[UPDATE] Error logging update: {e}", exc_info=True)
+    
+    # Добавляем обработчик для логирования всех обновлений ПЕРВЫМ (группа -1, самый низкий приоритет, но выполняется первым)
+    # Это гарантирует, что мы увидим все обновления ДО их обработки другими обработчиками
+    application.add_handler(MessageHandler(filters.ALL, log_update), group=-1)
     
     # ConversationHandler для авторизации
     # Работает в приватных чатах (по умолчанию команды работают только в приватных чатах)
@@ -605,27 +642,6 @@ def main():
     
     # Регистрируем обработчик ошибок
     application.add_error_handler(error_handler)
-    
-    # Обработчик всех обновлений для логирования (добавляем ПЕРЕД другими обработчиками)
-    async def log_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Логируем все обновления для отладки"""
-        try:
-            if update.message:
-                chat_type = "PRIVATE" if update.message.chat.type == "private" else f"GROUP ({update.message.chat.type})"
-                logger.info(f"[UPDATE] Message from user {update.effective_user.id} (@{update.effective_user.username or 'N/A'}) in {chat_type}: {update.message.text or 'N/A'}")
-                if update.message.text and update.message.text.startswith('/'):
-                    logger.info(f"[UPDATE] Command detected: {update.message.text}")
-            elif update.callback_query:
-                logger.info(f"[UPDATE] Callback query from {update.effective_user.id}: {update.callback_query.data}")
-            elif update.edited_message:
-                logger.info(f"[UPDATE] Edited message from {update.effective_user.id}")
-            else:
-                logger.info(f"[UPDATE] Other update type: {type(update)}")
-        except Exception as e:
-            logger.error(f"[UPDATE] Error logging update: {e}")
-    
-    # Добавляем обработчик для логирования всех обновлений (группа 0, самый высокий приоритет)
-    application.add_handler(MessageHandler(filters.ALL, log_update), group=0)
     
     logger.info("[BOT] All handlers registered")
     
@@ -653,13 +669,24 @@ def main():
     scheduler.start()
     
     # Запускаем бота
+    logger.info("=" * 60)
     logger.info("Bot started")
+    logger.info(f"[BOT] Code version: 2026-01-21-v3 (with detailed logging)")
     logger.info(f"[BOT] Starting polling with token: {config.TELEGRAM_BOT_TOKEN[:10]}...")
     logger.info(f"[BOT] Polling mode: allowed_updates={Update.ALL_TYPES}, drop_pending_updates=False")
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=False  # Обрабатываем все обновления
-    )
+    logger.info(f"[BOT] All handlers registered, starting polling...")
+    logger.info("=" * 60)
+    
+    try:
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=False  # Обрабатываем все обновления
+        )
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Fatal error in polling: {e}", exc_info=True)
+        raise
 
 if __name__ == '__main__':
     main()
