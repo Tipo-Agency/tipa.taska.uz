@@ -8,6 +8,7 @@ import asyncio
 import logging
 import sys
 import os
+import subprocess
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -745,6 +746,27 @@ def main():
     application.post_init = post_init
     application.post_shutdown = post_shutdown
     
+    # Проверяем, нет ли других запущенных экземпляров бота (перед запуском polling)
+    try:
+        running_processes = subprocess.run(
+            ['pgrep', '-f', 'python.*bot.py'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if running_processes.returncode == 0:
+            pids = [p for p in running_processes.stdout.strip().split('\n') if p]
+            current_pid = str(os.getpid())
+            other_pids = [pid for pid in pids if pid != current_pid]
+            if other_pids:
+                logger.warning(f"[BOT] ⚠️ WARNING: Other bot processes detected: {other_pids}")
+                logger.warning(f"[BOT] This may cause 409 Conflict errors!")
+                logger.warning(f"[BOT] Current PID: {current_pid}")
+            else:
+                logger.info(f"[BOT] ✅ No other bot processes detected (current PID: {current_pid})")
+    except Exception as e:
+        logger.warning(f"[BOT] Could not check for other processes: {e}")
+    
     try:
         logger.info("[BOT] Starting polling...")
         logger.info("[BOT] If you send /start to the bot, you should see [UPDATE] messages in logs")
@@ -754,7 +776,9 @@ def main():
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=False,  # Обрабатываем все обновления
             poll_interval=1.0,  # Проверяем обновления каждую секунду
-            timeout=10  # Таймаут для запросов
+            timeout=10,  # Таймаут для запросов
+            bootstrap_retries=-1,  # Бесконечные попытки при ошибках
+            close_loop=False  # Не закрывать event loop при ошибках
         )
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
