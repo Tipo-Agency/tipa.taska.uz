@@ -667,19 +667,11 @@ def main():
     
     # Добавляем обработчик для логирования всех обновлений ПЕРВЫМ (группа -1)
     # Это гарантирует, что мы увидим все обновления ДО их обработки другими обработчиками
-    # Используем UpdateHandler вместо MessageHandler, чтобы ловить ВСЕ типы обновлений
-    from telegram.ext import UpdateHandler
-    
-    # Создаем обработчик для всех типов обновлений
-    class AllUpdatesHandler(UpdateHandler):
-        def __init__(self, callback):
-            super().__init__(callback)
-        
-        def check_update(self, update: Update) -> bool:
-            return True  # Принимаем все обновления
-    
-    application.add_handler(AllUpdatesHandler(log_update), group=-1)
-    logger.info("[BOT] Logging handler registered in group -1 (will see ALL updates)")
+    # MessageHandler с filters.ALL ловит все сообщения
+    application.add_handler(MessageHandler(filters.ALL, log_update), group=-1)
+    # Также добавляем обработчик для callback_query
+    application.add_handler(CallbackQueryHandler(log_update), group=-1)
+    logger.info("[BOT] Logging handlers registered in group -1 (will see ALL updates)")
     
     # ConversationHandler для авторизации
     # Работает в приватных чатах (по умолчанию команды работают только в приватных чатах)
@@ -776,9 +768,7 @@ def main():
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=False,  # Обрабатываем все обновления
             poll_interval=1.0,  # Проверяем обновления каждую секунду
-            timeout=10,  # Таймаут для запросов
-            bootstrap_retries=-1,  # Бесконечные попытки при ошибках
-            close_loop=False  # Не закрывать event loop при ошибках
+            timeout=10  # Таймаут для запросов
         )
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
