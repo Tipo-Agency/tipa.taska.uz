@@ -46,29 +46,30 @@ from notifications import (
 from scheduler import TaskScheduler
 from utils import get_today_date, is_overdue
 
+# Версия кода - определяем ДО всего остального
+CODE_VERSION_AT_START = "2026-01-21-v7"
+BOT_FILE_PATH = os.path.abspath(__file__)
+
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    force=True  # Принудительно перезаписываем конфигурацию
 )
 logger = logging.getLogger(__name__)
 
-# Логируем версию кода СРАЗУ при импорте модуля
-CODE_VERSION_AT_START = "2026-01-21-v7"
-
-# Принудительно выводим версию в stdout и stderr для диагностики
-print(f"[BOT] ===== MODULE LOADED ===== Code version: {CODE_VERSION_AT_START} =====", file=sys.stdout, flush=True)
-print(f"[BOT] ===== MODULE LOADED ===== Code version: {CODE_VERSION_AT_START} =====", file=sys.stderr, flush=True)
-
-# Также логируем путь к файлу для проверки
-BOT_FILE_PATH = os.path.abspath(__file__)
-print(f"[BOT] Bot file path: {BOT_FILE_PATH}", file=sys.stdout, flush=True)
-print(f"[BOT] Bot file exists: {os.path.exists(BOT_FILE_PATH)}", file=sys.stdout, flush=True)
-if os.path.exists(BOT_FILE_PATH):
-    print(f"[BOT] Bot file modified: {os.path.getmtime(BOT_FILE_PATH)}", file=sys.stdout, flush=True)
-
+# Логируем версию кода СРАЗУ после настройки логирования
+logger.info("=" * 60)
 logger.info(f"[BOT] ===== MODULE LOADED ===== Code version: {CODE_VERSION_AT_START} =====")
 logger.info(f"[BOT] Bot file path: {BOT_FILE_PATH}")
+logger.info(f"[BOT] Bot file exists: {os.path.exists(BOT_FILE_PATH)}")
+if os.path.exists(BOT_FILE_PATH):
+    logger.info(f"[BOT] Bot file modified: {os.path.getmtime(BOT_FILE_PATH)}")
+logger.info("=" * 60)
+
+# Также выводим в stdout/stderr для systemd
+print(f"[BOT] ===== MODULE LOADED ===== Code version: {CODE_VERSION_AT_START} =====", flush=True)
+print(f"[BOT] Bot file path: {BOT_FILE_PATH}", flush=True)
 
 # Включаем детальное логирование для httpx (чтобы видеть ответы от Telegram API)
 logging.getLogger("httpx").setLevel(logging.DEBUG)
@@ -634,29 +635,49 @@ def main():
         """Логируем все обновления для отладки"""
         try:
             logger.info(f"[UPDATE] ===== RECEIVED UPDATE (ID: {update.update_id}) =====")
+            print(f"[UPDATE] ===== RECEIVED UPDATE (ID: {update.update_id}) =====", flush=True)
+            
             if update.message:
                 chat_type = "PRIVATE" if update.message.chat.type == "private" else f"GROUP ({update.message.chat.type})"
                 user_id = update.effective_user.id if update.effective_user else "N/A"
                 username = update.effective_user.username if update.effective_user and update.effective_user.username else "N/A"
                 text = update.message.text or "N/A"
                 logger.info(f"[UPDATE] Message from user {user_id} (@{username}) in {chat_type}: {text}")
+                print(f"[UPDATE] Message from user {user_id} (@{username}) in {chat_type}: {text}", flush=True)
                 if text and text.startswith('/'):
                     logger.info(f"[UPDATE] ⚠️ COMMAND DETECTED: {text}")
+                    print(f"[UPDATE] ⚠️ COMMAND DETECTED: {text}", flush=True)
             elif update.callback_query:
                 user_id = update.effective_user.id if update.effective_user else "N/A"
                 logger.info(f"[UPDATE] Callback query from {user_id}: {update.callback_query.data}")
+                print(f"[UPDATE] Callback query from {user_id}: {update.callback_query.data}", flush=True)
             elif update.edited_message:
                 user_id = update.effective_user.id if update.effective_user else "N/A"
                 logger.info(f"[UPDATE] Edited message from {user_id}")
+                print(f"[UPDATE] Edited message from {user_id}", flush=True)
             else:
                 logger.info(f"[UPDATE] Other update type: {type(update)}")
+                print(f"[UPDATE] Other update type: {type(update)}", flush=True)
             logger.info(f"[UPDATE] ===== END UPDATE =====")
+            print(f"[UPDATE] ===== END UPDATE =====", flush=True)
         except Exception as e:
             logger.error(f"[UPDATE] Error logging update: {e}", exc_info=True)
+            print(f"[UPDATE] ERROR: {e}", flush=True)
     
     # Добавляем обработчик для логирования всех обновлений ПЕРВЫМ (группа -1)
     # Это гарантирует, что мы увидим все обновления ДО их обработки другими обработчиками
-    application.add_handler(MessageHandler(filters.ALL, log_update), group=-1)
+    # Используем UpdateHandler вместо MessageHandler, чтобы ловить ВСЕ типы обновлений
+    from telegram.ext import UpdateHandler
+    
+    # Создаем обработчик для всех типов обновлений
+    class AllUpdatesHandler(UpdateHandler):
+        def __init__(self, callback):
+            super().__init__(callback)
+        
+        def check_update(self, update: Update) -> bool:
+            return True  # Принимаем все обновления
+    
+    application.add_handler(AllUpdatesHandler(log_update), group=-1)
     logger.info("[BOT] Logging handler registered in group -1 (will see ALL updates)")
     
     # ConversationHandler для авторизации

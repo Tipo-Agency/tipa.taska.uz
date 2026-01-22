@@ -56,15 +56,50 @@ if [ ! -f "$BOT_DIR/.env" ]; then
     fi
 fi
 
-# Останавливаем существующий сервис если он запущен
+# Останавливаем все экземпляры бота (важно для избежания ошибки 409 Conflict)
+echo "🛑 Stopping all bot instances..."
+
+# 1. Останавливаем systemd сервис
 if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-    echo "🛑 Stopping existing service..."
+    echo "   Stopping systemd service..."
     sudo systemctl stop "$SERVICE_NAME" || true
-    sleep 5  # Даем время сервису полностью остановиться
-    # Убиваем все процессы Python, связанные с ботом (на всякий случай)
-    pkill -f "python.*bot.py" || true
+    sleep 3
+fi
+
+# 2. Находим и убиваем все процессы Python с bot.py
+BOT_PIDS=$(pgrep -f "python.*bot.py" 2>/dev/null || echo "")
+if [ -n "$BOT_PIDS" ]; then
+    echo "   Found running bot processes: $BOT_PIDS"
+    echo "   Killing all bot processes..."
+    for PID in $BOT_PIDS; do
+        echo "      Killing PID: $PID"
+        kill -9 "$PID" 2>/dev/null || true
+    done
+    sleep 2
+else
+    echo "   No running bot processes found"
+fi
+
+# 3. Проверяем, что все остановлено
+REMAINING_PIDS=$(pgrep -f "python.*bot.py" 2>/dev/null || echo "")
+if [ -n "$REMAINING_PIDS" ]; then
+    echo "   ⚠️ Some processes still running, force killing: $REMAINING_PIDS"
+    for PID in $REMAINING_PIDS; do
+        kill -9 "$PID" 2>/dev/null || true
+    done
     sleep 2
 fi
+
+# 4. Финальная проверка
+FINAL_CHECK=$(pgrep -f "python.*bot.py" 2>/dev/null || echo "")
+if [ -z "$FINAL_CHECK" ]; then
+    echo "   ✅ All bot processes stopped successfully"
+else
+    echo "   ⚠️ Warning: Some processes may still be running: $FINAL_CHECK"
+    ps aux | grep "python.*bot.py" | grep -v grep || true
+fi
+
+sleep 2  # Даем время системе полностью освободить ресурсы
 
 # АГРЕССИВНАЯ очистка кэша Python (включая venv)
 echo "🧹 Cleaning Python cache (aggressive mode)..."
@@ -171,8 +206,30 @@ sudo systemctl enable "$SERVICE_NAME"
 echo "🚀 Starting service..."
 sudo systemctl start "$SERVICE_NAME"
 
+# Проверяем, что запустился только один процесс (важно для избежания ошибки 409)
+sleep 3
+RUNNING_PROCESSES=$(pgrep -f "python.*bot.py" 2>/dev/null | wc -l || echo "0")
+if [ "$RUNNING_PROCESSES" -gt 1 ]; then
+    echo "   ⚠️ Warning: Multiple bot processes detected ($RUNNING_PROCESSES)"
+    echo "   This may cause 409 Conflict errors! Killing duplicates..."
+    # Оставляем только первый процесс, убиваем остальные
+    ALL_PIDS=$(pgrep -f "python.*bot.py" 2>/dev/null)
+    FIRST_PID=$(echo "$ALL_PIDS" | head -1)
+    for PID in $ALL_PIDS; do
+        if [ "$PID" != "$FIRST_PID" ]; then
+            echo "      Killing duplicate PID: $PID"
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+    done
+    sleep 2
+elif [ "$RUNNING_PROCESSES" -eq 1 ]; then
+    echo "   ✅ Single bot process running (correct)"
+else
+    echo "   ⚠️ Warning: No bot processes found"
+fi
+
 # Проверяем статус
-sleep 5  # Увеличиваем задержку, чтобы бот успел запуститься
+sleep 2  # Дополнительная задержка для инициализации
 if systemctl is-active --quiet "$SERVICE_NAME"; then
     echo "✅ Telegram bot deployed and running successfully!"
     echo "📊 Service status:"
