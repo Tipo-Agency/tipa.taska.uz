@@ -28,38 +28,38 @@ export const DEFAULT_PRIORITIES: PriorityOption[] = [
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPreferences = {
     // Задачи
-    newTask: { app: true, telegram: true },
-    statusChange: { app: true, telegram: true },
-    taskAssigned: { app: true, telegram: true },
-    taskComment: { app: true, telegram: true },
-    taskDeadline: { app: true, telegram: true },
+    newTask: { telegramPersonal: true, telegramGroup: false },
+    statusChange: { telegramPersonal: true, telegramGroup: false },
+    taskAssigned: { telegramPersonal: true, telegramGroup: false },
+    taskComment: { telegramPersonal: true, telegramGroup: false },
+    taskDeadline: { telegramPersonal: true, telegramGroup: false },
     // Документы
-    docCreated: { app: true, telegram: true },
-    docUpdated: { app: true, telegram: true },
-    docShared: { app: true, telegram: true },
+    docCreated: { telegramPersonal: true, telegramGroup: false },
+    docUpdated: { telegramPersonal: true, telegramGroup: false },
+    docShared: { telegramPersonal: true, telegramGroup: false },
     // Встречи
-    meetingCreated: { app: true, telegram: true },
-    meetingReminder: { app: true, telegram: true },
-    meetingUpdated: { app: true, telegram: true },
+    meetingCreated: { telegramPersonal: true, telegramGroup: false },
+    meetingReminder: { telegramPersonal: true, telegramGroup: false },
+    meetingUpdated: { telegramPersonal: true, telegramGroup: false },
     // Контент-план
-    postCreated: { app: true, telegram: true },
-    postStatusChanged: { app: true, telegram: true },
+    postCreated: { telegramPersonal: true, telegramGroup: false },
+    postStatusChanged: { telegramPersonal: true, telegramGroup: false },
     // Финансы
-    purchaseRequestCreated: { app: true, telegram: true },
-    purchaseRequestStatusChanged: { app: true, telegram: true },
-    financePlanUpdated: { app: true, telegram: true },
+    purchaseRequestCreated: { telegramPersonal: true, telegramGroup: false },
+    purchaseRequestStatusChanged: { telegramPersonal: true, telegramGroup: false },
+    financePlanUpdated: { telegramPersonal: true, telegramGroup: false },
     // CRM
-    dealCreated: { app: true, telegram: true },
-    dealStatusChanged: { app: true, telegram: true },
-    clientCreated: { app: true, telegram: true },
-    contractCreated: { app: true, telegram: true },
+    dealCreated: { telegramPersonal: true, telegramGroup: false },
+    dealStatusChanged: { telegramPersonal: true, telegramGroup: false },
+    clientCreated: { telegramPersonal: true, telegramGroup: false },
+    contractCreated: { telegramPersonal: true, telegramGroup: false },
     // Сотрудники
-    employeeCreated: { app: true, telegram: true },
-    employeeUpdated: { app: true, telegram: true },
+    employeeCreated: { telegramPersonal: true, telegramGroup: false },
+    employeeUpdated: { telegramPersonal: true, telegramGroup: false },
     // Бизнес-процессы
-    processStarted: { app: true, telegram: true },
-    processStepCompleted: { app: true, telegram: true },
-    processStepRequiresApproval: { app: true, telegram: true }
+    processStarted: { telegramPersonal: true, telegramGroup: false },
+    processStepCompleted: { telegramPersonal: true, telegramGroup: false },
+    processStepRequiresApproval: { telegramPersonal: true, telegramGroup: false }
 };
 
 export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [

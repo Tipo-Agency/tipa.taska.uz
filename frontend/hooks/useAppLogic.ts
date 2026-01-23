@@ -3,7 +3,17 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../../backend/api';
 import { FAVICON_SVG_DATA_URI } from '../../components/AppIcons';
 import { storageService } from '../../services/storageService';
-import { pollTelegramUpdates, sendTelegramNotification, formatDealMessage, formatDealStatusChangeMessage, formatClientMessage, formatContractMessage, formatPurchaseRequestMessage, formatDocumentMessage, formatMeetingMessage } from '../../services/telegramService';
+import { pollTelegramUpdates } from '../../services/telegramService';
+import { 
+  notifyDealCreated, 
+  notifyDealStatusChanged, 
+  notifyClientCreated, 
+  notifyContractCreated, 
+  notifyDocCreated, 
+  notifyMeetingCreated, 
+  notifyPurchaseRequestCreated,
+  NotificationContext 
+} from '../../services/notificationService';
 import { leadSyncService } from '../../services/leadSyncService';
 import { Comment, Deal, Task, BusinessProcess, Client, Contract, PurchaseRequest, Doc, Meeting, SalesFunnel } from '../../types';
 import { createDeleteHandler } from '../../utils/crudUtils';
@@ -422,11 +432,14 @@ export const useAppLogic = () => {
       
       const existing = docData.id ? contentSlice.state.docs.find(d => d.id === docData.id) : null;
       const newDoc = contentSlice.actions.saveDoc(docData, targetTableId, docData.folderId);
-      if (newDoc) {
-          // Отправляем уведомление, если это новый документ
-          if (!existing && settingsSlice.state.notificationPrefs?.docCreated?.telegram && authSlice.state.currentUser) {
-            sendTelegramNotification(formatDocumentMessage(newDoc.title, authSlice.state.currentUser.name)).catch(() => {});
-          }
+      if (newDoc && !existing && authSlice.state.currentUser) {
+        const context: NotificationContext = {
+          currentUser: authSlice.state.currentUser,
+          allUsers: authSlice.state.users,
+          notificationPrefs: settingsSlice.state.notificationPrefs
+        };
+        notifyDocCreated(newDoc, { context }).catch(() => {});
+      }
           // Обновляем данные модуля после сохранения
           if (loadedModulesRef.current.has('content')) {
               refreshModuleData('content').catch(err => console.error('Ошибка обновления данных модуля:', err));
@@ -612,17 +625,27 @@ export const useAppLogic = () => {
       saveClient: (client: Client) => {
         const existing = crmSlice.state.clients.find(c => c.id === client.id);
         crmSlice.actions.saveClient(client);
-        if (!existing && settingsSlice.state.notificationPrefs?.clientCreated?.telegram && authSlice.state.currentUser) {
-          sendTelegramNotification(formatClientMessage(client.name, authSlice.state.currentUser.name)).catch(() => {});
+        if (!existing && authSlice.state.currentUser) {
+          const context: NotificationContext = {
+            currentUser: authSlice.state.currentUser,
+            allUsers: authSlice.state.users,
+            notificationPrefs: settingsSlice.state.notificationPrefs
+          };
+          notifyClientCreated(client, { context }).catch(() => {});
         }
       },
       deleteClient: crmSlice.actions.deleteClient,
       saveContract: (contract: Contract) => {
         const existing = crmSlice.state.contracts.find(c => c.id === contract.id);
         crmSlice.actions.saveContract(contract);
-        if (!existing && settingsSlice.state.notificationPrefs?.contractCreated?.telegram && authSlice.state.currentUser) {
+        if (!existing && authSlice.state.currentUser) {
           const client = crmSlice.state.clients.find(c => c.id === contract.clientId);
-          sendTelegramNotification(formatContractMessage(contract.number, client?.name || 'Неизвестный клиент', contract.amount, authSlice.state.currentUser.name)).catch(() => {});
+          const context: NotificationContext = {
+            currentUser: authSlice.state.currentUser,
+            allUsers: authSlice.state.users,
+            notificationPrefs: settingsSlice.state.notificationPrefs
+          };
+          notifyContractCreated(contract, client?.name || 'Неизвестный клиент', { context }).catch(() => {});
         }
       },
       deleteContract: crmSlice.actions.deleteContract,
@@ -632,11 +655,21 @@ export const useAppLogic = () => {
         const existing = crmSlice.state.deals.find(d => d.id === deal.id);
         const oldStage = existing?.stage;
         crmSlice.actions.saveDeal(deal);
-        if (!existing && settingsSlice.state.notificationPrefs?.dealCreated?.telegram && authSlice.state.currentUser) {
-          const assignee = authSlice.state.users.find(u => u.id === deal.assigneeId);
-          sendTelegramNotification(formatDealMessage(deal.title, deal.stage, deal.amount, assignee?.name || 'Не назначено')).catch(() => {});
-        } else if (existing && oldStage !== deal.stage && settingsSlice.state.notificationPrefs?.dealStatusChanged?.telegram && authSlice.state.currentUser) {
-          sendTelegramNotification(formatDealStatusChangeMessage(deal.title, oldStage || 'Новая', deal.stage, authSlice.state.currentUser.name)).catch(() => {});
+        if (!existing && authSlice.state.currentUser) {
+          const assignee = authSlice.state.users.find(u => u.id === deal.assigneeId) || null;
+          const context: NotificationContext = {
+            currentUser: authSlice.state.currentUser,
+            allUsers: authSlice.state.users,
+            notificationPrefs: settingsSlice.state.notificationPrefs
+          };
+          notifyDealCreated(deal, assignee, { context }).catch(() => {});
+        } else if (existing && oldStage !== deal.stage && authSlice.state.currentUser) {
+          const context: NotificationContext = {
+            currentUser: authSlice.state.currentUser,
+            allUsers: authSlice.state.users,
+            notificationPrefs: settingsSlice.state.notificationPrefs
+          };
+          notifyDealStatusChanged(deal, oldStage || 'Новая', deal.stage, { context }).catch(() => {});
         }
       },
       deleteDeal: crmSlice.actions.deleteDeal,
@@ -647,8 +680,14 @@ export const useAppLogic = () => {
       saveMeeting: (meeting: Meeting) => {
         const existing = contentSlice.state.meetings.find(m => m.id === meeting.id);
         contentSlice.actions.saveMeeting(meeting);
-        if (!existing && settingsSlice.state.notificationPrefs?.meetingCreated?.telegram && authSlice.state.currentUser) {
-          sendTelegramNotification(formatMeetingMessage(meeting.title, meeting.date, meeting.time, authSlice.state.currentUser.name)).catch(() => {});
+        if (!existing && authSlice.state.currentUser) {
+          const participantIds = meeting.participantIds || [];
+          const context: NotificationContext = {
+            currentUser: authSlice.state.currentUser,
+            allUsers: authSlice.state.users,
+            notificationPrefs: settingsSlice.state.notificationPrefs
+          };
+          notifyMeetingCreated(meeting, participantIds, { context }).catch(() => {});
         }
       },
       deleteMeeting: contentSlice.actions.deleteMeeting,
@@ -667,9 +706,18 @@ export const useAppLogic = () => {
       saveDepartment: financeSlice.actions.saveDepartment, deleteDepartment: financeSlice.actions.deleteDepartment, saveFinanceCategory: financeSlice.actions.saveFinanceCategory, deleteFinanceCategory: financeSlice.actions.deleteFinanceCategory, updateFinancePlan: financeSlice.actions.updateFinancePlan, savePurchaseRequest: (request: PurchaseRequest) => {
         const existing = financeSlice.state.purchaseRequests.find(r => r.id === request.id);
         financeSlice.actions.savePurchaseRequest(request);
-        if (!existing && settingsSlice.state.notificationPrefs?.purchaseRequestCreated?.telegram && authSlice.state.currentUser) {
+        if (!existing && authSlice.state.currentUser) {
           const department = financeSlice.state.departments.find(d => d.id === request.departmentId);
-          sendTelegramNotification(formatPurchaseRequestMessage(request.title || 'Заявка', request.amount || 0, department?.name || 'Не указан', authSlice.state.currentUser.name)).catch(() => {});
+          const context: NotificationContext = {
+            currentUser: authSlice.state.currentUser,
+            allUsers: authSlice.state.users,
+            notificationPrefs: settingsSlice.state.notificationPrefs
+          };
+          notifyPurchaseRequestCreated(
+            { id: request.id, title: request.description, description: request.description, amount: request.amount },
+            department?.name || 'Не указан',
+            { context }
+          ).catch(() => {});
         }
       },
       deletePurchaseRequest: financeSlice.actions.deletePurchaseRequest, saveFinancialPlanDocument: financeSlice.actions.saveFinancialPlanDocument, deleteFinancialPlanDocument: financeSlice.actions.deleteFinancialPlanDocument, saveFinancialPlanning: financeSlice.actions.saveFinancialPlanning, deleteFinancialPlanning: financeSlice.actions.deleteFinancialPlanning,

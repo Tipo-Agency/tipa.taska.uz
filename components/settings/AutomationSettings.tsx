@@ -23,7 +23,7 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({
     
     // Защита от undefined - используем значения по умолчанию
     const safePrefs = useMemo(() => {
-        const defaultPrefs = { app: true, telegram: true };
+        const defaultPrefs = { telegramPersonal: true, telegramGroup: false };
         return {
             // Задачи
             newTask: notificationPrefs?.newTask || defaultPrefs,
@@ -70,11 +70,11 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({
     const [autoActionType, setAutoActionType] = useState<'telegram_message' | 'approval_request'>('telegram_message');
     const [autoApprovalType, setAutoApprovalType] = useState<'purchase_request' | 'process_step' | 'document' | 'deal'>('purchase_request');
 
-    const handleTogglePref = (key: keyof NotificationPreferences, channel: 'app' | 'telegram') => {
+    const handleTogglePref = (key: keyof NotificationPreferences, channel: 'telegramPersonal' | 'telegramGroup') => {
         const currentPrefs = notificationPrefs || safePrefs;
         onUpdatePrefs({
             ...currentPrefs,
-            [key]: { ...(currentPrefs[key] || { app: true, telegram: true }), [channel]: !(currentPrefs[key]?.[channel] ?? true) }
+            [key]: { ...(currentPrefs[key] || { telegramPersonal: true, telegramGroup: false }), [channel]: !(currentPrefs[key]?.[channel] ?? (channel === 'telegramPersonal' ? true : false)) }
         });
     };
 
@@ -275,7 +275,10 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Настройки уведомлений для модуля */}
                     <div className="bg-white dark:bg-[#252525] p-6 rounded-xl border border-gray-200 dark:border-[#333]">
-                        <h3 className="font-bold text-gray-800 dark:text-white mb-4">Настройки уведомлений</h3>
+                        <h3 className="font-bold text-gray-800 dark:text-white mb-2">Настройки уведомлений</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                            Уведомления в системе всегда включены для всех пользователей. Здесь настраиваются только Telegram уведомления.
+                        </p>
                         <div className="space-y-4">
                             {getModuleNotificationPrefs(automationModule).map(pref => (
                                 <div key={pref.key} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-[#333]">
@@ -287,20 +290,20 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({
                                         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
                                             <input 
                                                 type="checkbox" 
-                                                checked={safePrefs[pref.key].app} 
-                                                onChange={() => handleTogglePref(pref.key, 'app')} 
+                                                checked={safePrefs[pref.key].telegramPersonal} 
+                                                onChange={() => handleTogglePref(pref.key, 'telegramPersonal')} 
                                                 className="rounded text-blue-600 focus:ring-0"
                                             /> 
-                                            В системе
+                                            Личный чат
                                         </label>
                                         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
                                             <input 
                                                 type="checkbox" 
-                                                checked={safePrefs[pref.key].telegram} 
-                                                onChange={() => handleTogglePref(pref.key, 'telegram')} 
+                                                checked={safePrefs[pref.key].telegramGroup} 
+                                                onChange={() => handleTogglePref(pref.key, 'telegramGroup')} 
                                                 className="rounded text-blue-600 focus:ring-0"
                                             /> 
-                                            Telegram
+                                            Группа
                                         </label>
                                     </div>
                                 </div>

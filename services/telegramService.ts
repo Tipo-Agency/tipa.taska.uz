@@ -5,15 +5,19 @@ import { api } from "../backend/api";
 
 // --- EMPLOYEE BOT (Notifications, Automation) ---
 
-export const sendTelegramNotification = async (message: string, buttons?: TelegramButtonConfig[]) => {
-  // Use Employee Bot Token
+/**
+ * Отправляет уведомление в Telegram
+ * @param message - Текст сообщения
+ * @param buttons - Кнопки (опционально)
+ * @param targetChatId - ID чата для отправки (личный чат пользователя или группа)
+ */
+const sendTelegramMessage = async (message: string, targetChatId: string, buttons?: TelegramButtonConfig[]): Promise<boolean> => {
   const botToken = storageService.getEmployeeBotToken();
-  const chatId = storageService.getTelegramChatId();
   
-  if (!chatId || !botToken) {
+  if (!targetChatId || !botToken) {
     console.warn('[TELEGRAM] Не настроен bot token или chat ID:', { 
       hasToken: !!botToken, 
-      hasChatId: !!chatId 
+      hasChatId: !!targetChatId 
     });
     return false;
   }
@@ -21,7 +25,7 @@ export const sendTelegramNotification = async (message: string, buttons?: Telegr
   const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
   
   const body: any = {
-      chat_id: chatId,
+      chat_id: targetChatId,
       text: message,
       parse_mode: 'HTML',
   };
@@ -57,6 +61,54 @@ export const sendTelegramNotification = async (message: string, buttons?: Telegr
     console.error('[TELEGRAM EMPLOYEE] Send failed', error);
     return false;
   }
+};
+
+/**
+ * Отправляет уведомление в Telegram с учетом настроек (личный чат, группа)
+ * @param message - Текст сообщения
+ * @param buttons - Кнопки (опционально)
+ * @param notificationSetting - Настройки уведомления (telegramPersonal, telegramGroup)
+ * @param userTelegramChatId - ID личного чата пользователя (опционально, можно получить из User.telegramUserId)
+ * @param groupChatId - ID группового чата (опционально, берется из notificationPrefs.telegramGroupChatId)
+ */
+export const sendTelegramNotification = async (
+  message: string, 
+  buttons?: TelegramButtonConfig[],
+  notificationSetting?: { telegramPersonal?: boolean; telegramGroup?: boolean },
+  userTelegramChatId?: string,
+  groupChatId?: string
+) => {
+  // Если настройки не указаны, используем старый способ (для обратной совместимости)
+  if (!notificationSetting) {
+    const chatId = storageService.getTelegramChatId();
+    return sendTelegramMessage(message, chatId, buttons);
+  }
+
+  let sent = false;
+
+  // Отправляем в личный чат, если включено
+  if (notificationSetting.telegramPersonal && userTelegramChatId) {
+    sent = await sendTelegramMessage(message, userTelegramChatId, buttons) || sent;
+  }
+
+  // Отправляем в группу, если включено
+  if (notificationSetting.telegramGroup) {
+    const groupId = groupChatId || storageService.getTelegramChatId();
+    if (groupId) {
+      sent = await sendTelegramMessage(message, groupId, buttons) || sent;
+    }
+  }
+
+  return sent;
+};
+
+/**
+ * Получает Telegram chat ID пользователя из его профиля
+ * @param user - Пользователь
+ * @returns Telegram chat ID или undefined
+ */
+export const getUserTelegramChatId = (user: { telegramUserId?: string } | null | undefined): string | undefined => {
+  return user?.telegramUserId;
 };
 
 // --- CLIENT BOT (Leads, Chat) ---
@@ -168,38 +220,40 @@ export const pollTelegramUpdates = async (): Promise<{ newDeals: Deal[], newMess
     return result;
 };
 
-export const formatStatusChangeMessage = (taskTitle: string, oldStatus: string, newStatus: string, user: string) => {
+// --- Форматирование сообщений для Telegram ---
+
+export const formatStatusChangeMessage = (taskTitle: string, oldStatus: string, newStatus: string, user: string): string => {
   return `🔔 <b>Обновление статуса</b>\n\n👤 <b>Сотрудник:</b> ${user}\n📝 <b>Задача:</b> ${taskTitle}\n🔄 <b>Статус:</b> ${oldStatus} ➡️ ${newStatus}`;
 };
 
-export const formatNewTaskMessage = (taskTitle: string, priority: string, endDate: string, assignee: string, project: string | null) => {
+export const formatNewTaskMessage = (taskTitle: string, priority: string, endDate: string, assignee: string, project: string | null): string => {
     return `🆕 <b>Новая задача</b>\n\n👤 <b>Ответственный:</b> ${assignee}\n📝 <b>Задача:</b> ${taskTitle}\n📂 <b>Модуль:</b> ${project || 'Без модуля'}\n⚡ <b>Приоритет:</b> ${priority}\n📅 <b>Срок:</b> ${endDate}`;
 };
 
-export const formatDealMessage = (dealTitle: string, stage: string, amount: number, assignee: string) => {
+export const formatDealMessage = (dealTitle: string, stage: string, amount: number, assignee: string): string => {
     return `💼 <b>Новая сделка</b>\n\n<b>Название:</b> ${dealTitle}\n<b>Стадия:</b> ${stage}\n<b>Сумма:</b> ${amount.toLocaleString()} UZS\n<b>Ответственный:</b> ${assignee}`;
 };
 
-export const formatDealStatusChangeMessage = (dealTitle: string, oldStage: string, newStage: string, user: string) => {
+export const formatDealStatusChangeMessage = (dealTitle: string, oldStage: string, newStage: string, user: string): string => {
     return `🔄 <b>Изменена стадия сделки</b>\n\n<b>Сделка:</b> ${dealTitle}\n<b>Было:</b> ${oldStage}\n<b>Стало:</b> ${newStage}\n<b>Изменил:</b> ${user}`;
 };
 
-export const formatClientMessage = (clientName: string, user: string) => {
+export const formatClientMessage = (clientName: string, user: string): string => {
     return `👤 <b>Новый клиент</b>\n\n<b>Клиент:</b> ${clientName}\n<b>Добавил:</b> ${user}`;
 };
 
-export const formatContractMessage = (contractNumber: string, clientName: string, amount: number, user: string) => {
+export const formatContractMessage = (contractNumber: string, clientName: string, amount: number, user: string): string => {
     return `📄 <b>Новый договор</b>\n\n<b>Номер:</b> ${contractNumber}\n<b>Клиент:</b> ${clientName}\n<b>Сумма:</b> ${amount.toLocaleString()} UZS\n<b>Добавил:</b> ${user}`;
 };
 
-export const formatPurchaseRequestMessage = (requestTitle: string, amount: number, department: string, user: string) => {
+export const formatPurchaseRequestMessage = (requestTitle: string, amount: number, department: string, user: string): string => {
     return `💰 <b>Новая заявка на покупку</b>\n\n<b>Название:</b> ${requestTitle}\n<b>Сумма:</b> ${amount.toLocaleString()} UZS\n<b>Отдел:</b> ${department}\n<b>Создал:</b> ${user}`;
 };
 
-export const formatDocumentMessage = (docTitle: string, user: string) => {
+export const formatDocumentMessage = (docTitle: string, user: string): string => {
     return `📑 <b>Новый документ</b>\n\n<b>Название:</b> ${docTitle}\n<b>Добавил:</b> ${user}`;
 };
 
-export const formatMeetingMessage = (meetingTitle: string, date: string, time: string, user: string) => {
+export const formatMeetingMessage = (meetingTitle: string, date: string, time: string, user: string): string => {
     return `📅 <b>Новая встреча</b>\n\n<b>Название:</b> ${meetingTitle}\n<b>Дата:</b> ${new Date(date).toLocaleDateString('ru-RU')}\n<b>Время:</b> ${time}\n<b>Создал:</b> ${user}`;
 };

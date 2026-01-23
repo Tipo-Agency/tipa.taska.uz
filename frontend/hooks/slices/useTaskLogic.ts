@@ -2,9 +2,9 @@
 import { useState, useEffect } from 'react';
 import { Task, Project, StatusOption, PriorityOption, User, TaskComment, TaskAttachment, AutomationRule, Doc } from '../../../types';
 import { api } from '../../../backend/api';
-import { sendTelegramNotification, formatNewTaskMessage, formatStatusChangeMessage } from '../../../services/telegramService';
 import { uploadTaskAttachment } from '../../../services/firebaseStorage';
 import { getTodayLocalDate, getDateDaysFromNow } from '../../../utils/dateUtils';
+import { notifyTaskCreated, notifyTaskStatusChanged, NotificationContext } from '../../../services/notificationService';
 
 export const useTaskLogic = (showNotification: (msg: string) => void, currentUser: User | null, users: User[], automationRules: AutomationRule[] = [], docs: Doc[] = [], onSaveDoc?: (docData: any, tableId?: string) => Doc | void) => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -104,9 +104,13 @@ export const useTaskLogic = (showNotification: (msg: string) => void, currentUse
             updatedTasks = tasks.map(t => t.id === taskData.id ? newTask : t);
             
             if (currentUser && taskData.status && oldStatus !== taskData.status) {
-                if (notificationPrefs?.statusChange?.telegram) {
-                    sendTelegramNotification(formatStatusChangeMessage(oldTask.title, oldStatus || '?', taskData.status, currentUser.name)).catch(() => {});
-                }
+                const assigneeUser = newTask.assigneeId ? users.find(u => u.id === newTask.assigneeId) : null;
+                const context: NotificationContext = {
+                    currentUser,
+                    allUsers: users,
+                    notificationPrefs
+                };
+                notifyTaskStatusChanged(newTask, oldStatus || '?', taskData.status, assigneeUser, { context }).catch(() => {});
                 processAutomation(newTask, 'status_change');
             }
         } else {
@@ -144,13 +148,13 @@ export const useTaskLogic = (showNotification: (msg: string) => void, currentUse
             updatedTasks = [...tasks, newTask];
             
             if (currentUser) {
-                const assigneeUser = users.find(u => u.id === newTask.assigneeId);
-                const assigneeName = assigneeUser ? assigneeUser.name : 'Не назначено';
-                const projectName = projects.find(p => p.id === newTask.projectId)?.name || null;
-                
-                if (notificationPrefs?.newTask?.telegram) {
-                    sendTelegramNotification(formatNewTaskMessage(newTask.title, newTask.priority, newTask.endDate, assigneeName, projectName)).catch(() => {});
-                }
+                const assigneeUser = users.find(u => u.id === newTask.assigneeId) || null;
+                const context: NotificationContext = {
+                    currentUser,
+                    allUsers: users,
+                    notificationPrefs
+                };
+                notifyTaskCreated(newTask, assigneeUser, { context }).catch(() => {});
                 processAutomation(newTask, 'new_task');
             }
         }
@@ -206,13 +210,13 @@ export const useTaskLogic = (showNotification: (msg: string) => void, currentUse
         updatedTasks = [...tasks, newTask];
         
         if (currentUser) {
-            const assigneeUser = users.find(u => u.id === newTask.assigneeId);
-            const assigneeName = assigneeUser ? assigneeUser.name : 'Не назначено';
-            const projectName = projects.find(p => p.id === newTask.projectId)?.name || null;
-            
-            if (notificationPrefs?.newTask?.telegram) {
-                sendTelegramNotification(formatNewTaskMessage(newTask.title, newTask.priority, newTask.endDate, assigneeName, projectName)).catch(() => {});
-            }
+            const assigneeUser = users.find(u => u.id === newTask.assigneeId) || null;
+            const context: NotificationContext = {
+                currentUser,
+                allUsers: users,
+                notificationPrefs
+            };
+            notifyTaskCreated(newTask, assigneeUser, { context }).catch(() => {});
             processAutomation(newTask, 'new_task');
         }
     }

@@ -31,6 +31,7 @@ export interface User {
   email?: string;
   phone?: string;
   telegram?: string;
+  telegramUserId?: string; // ID пользователя в Telegram (сохраняется ботом при авторизации)
   password?: string;
   mustChangePassword?: boolean;
   isArchived?: boolean; // Архив (мягкое удаление)
@@ -409,8 +410,10 @@ export interface ActivityLog {
 }
 
 export interface NotificationSetting {
-    app: boolean;
-    telegram: boolean;
+    // Уведомления в системе всегда включены для всех пользователей
+    // Настройки только для Telegram
+    telegramPersonal: boolean; // Уведомления в личный Telegram чат
+    telegramGroup: boolean;    // Уведомления в групповой Telegram чат
 }
 
 export interface NotificationPreferences {
@@ -449,6 +452,8 @@ export interface NotificationPreferences {
     processStepRequiresApproval: NotificationSetting;
     // Настройки воронок продаж
     defaultFunnelId?: string; // ID основной воронки для лидов по умолчанию
+    // Настройки Telegram
+    telegramGroupChatId?: string; // ID группового чата для уведомлений
 }
 
 // --- FINANCE TYPES ---
