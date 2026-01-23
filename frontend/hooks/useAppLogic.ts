@@ -440,17 +440,16 @@ export const useAppLogic = () => {
         };
         notifyDocCreated(newDoc, { context }).catch(() => {});
       }
-          // Обновляем данные модуля после сохранения
-          if (loadedModulesRef.current.has('content')) {
-              refreshModuleData('content').catch(err => console.error('Ошибка обновления данных модуля:', err));
-          }
-          if (docData.type === 'internal') { 
-              contentSlice.setters.setActiveDocId(newDoc.id); 
-              settingsSlice.setters.setCurrentView('doc-editor'); 
-          }
-          // Закрываем модалку явно
-          contentSlice.actions.closeDocModal();
+      // Обновляем данные модуля после сохранения
+      if (loadedModulesRef.current.has('content')) {
+          refreshModuleData('content').catch(err => console.error('Ошибка обновления данных модуля:', err));
       }
+      if (docData.type === 'internal') { 
+          contentSlice.setters.setActiveDocId(newDoc.id); 
+          settingsSlice.setters.setCurrentView('doc-editor'); 
+      }
+      // Закрываем модалку явно
+      contentSlice.actions.closeDocModal();
   };
 
   const handleDocClickWrapper = (doc: any) => {
