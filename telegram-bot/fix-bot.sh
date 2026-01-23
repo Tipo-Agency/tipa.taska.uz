@@ -149,6 +149,23 @@ fix_issues() {
     done
     sleep 2
     
+    # Дополнительно: проверяем и останавливаем tipa.uz.backend (может вызывать конфликт)
+    echo ""
+    echo "   🔍 Проверяем tipa.uz.backend (может вызывать конфликт)..."
+    TIPA_BACKEND_PIDS=$(ps aux | grep "tipa.uz.backend" | grep -v grep | awk '{print $2}' || echo "")
+    if [ -n "$TIPA_BACKEND_PIDS" ]; then
+        echo "   ⚠️ Найдены процессы tipa.uz.backend: $TIPA_BACKEND_PIDS"
+        echo "   Останавливаем их (бэкенд больше не используется)..."
+        for PID in $TIPA_BACKEND_PIDS; do
+            CMD=$(ps -p "$PID" -o cmd= 2>/dev/null || echo "")
+            echo "   Убиваем PID $PID: $CMD"
+            sudo kill -9 "$PID" 2>/dev/null || true
+        done
+        sleep 2
+    else
+        echo "   ✅ Процессы tipa.uz.backend не найдены"
+    fi
+    
     # Финальная проверка
     REMAINING=$(pgrep -f "python.*bot.py" 2>/dev/null || echo "")
     if [ -n "$REMAINING" ]; then
