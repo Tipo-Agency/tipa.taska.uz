@@ -27,7 +27,7 @@ from keyboards import (
     get_main_menu, get_tasks_menu, get_deals_menu, get_deal_menu, get_task_menu,
     get_settings_menu, get_profile_menu, get_statuses_keyboard, get_stages_keyboard,
     get_funnels_keyboard, get_clients_keyboard, get_users_keyboard, get_confirm_keyboard,
-    get_back_button
+    get_back_button, get_tasks_list_keyboard
 )
 from messages import format_task_message, format_deal_message, format_meeting_message, format_document_message
 from tasks import (
@@ -249,130 +249,6 @@ async def menu_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("📋 Задачи", reply_markup=get_tasks_menu())
 
 @require_auth
-async def tasks_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Задачи на сегодня"""
-    try:
-        query = update.callback_query
-        await query.answer()
-        
-        telegram_user_id = update.effective_user.id
-        if telegram_user_id not in user_sessions:
-            await query.answer("❌ Вы не авторизованы")
-            return
-        
-        user_id = user_sessions[telegram_user_id]['user_id']
-        
-        logger.info(f"[TASKS_TODAY] ===== CALLBACK RECEIVED =====")
-        logger.info(f"[TASKS_TODAY] Getting today tasks for user_id: {user_id}, telegram_user_id: {telegram_user_id}")
-        tasks = get_today_tasks(user_id)
-        logger.info(f"[TASKS_TODAY] Found {len(tasks)} today tasks after filtering")
-        
-        if not tasks:
-            await query.edit_message_text(
-                "✅ На сегодня задач нет!",
-                reply_markup=get_tasks_menu()
-            )
-            return
-        
-        message = f"📋 Задачи на сегодня ({len(tasks)}):\n\n"
-        keyboard = []
-        for task in tasks[:10]:  # Ограничиваем 10 задачами
-            task_id = task.get('id', '')
-            task_title = task.get('title', 'Без названия')[:30]
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"📋 {task_title}",
-                    callback_data=f"task_{task_id}"
-                )
-            ])
-        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
-        
-        await query.edit_message_text(
-            message,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    except KeyError as e:
-        logger.error(f"Error in tasks_today (KeyError): {e}", exc_info=True)
-        try:
-            await query.edit_message_text(
-                "❌ Ошибка авторизации. Попробуйте /start",
-                reply_markup=get_tasks_menu()
-            )
-        except:
-            pass
-    except Exception as e:
-        logger.error(f"Error in tasks_today: {e}", exc_info=True)
-        try:
-            await query.edit_message_text(
-                "❌ Произошла ошибка при получении задач. Попробуйте еще раз.",
-                reply_markup=get_tasks_menu()
-            )
-        except:
-            pass
-
-@require_auth
-async def tasks_overdue(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просроченные задачи"""
-    try:
-        query = update.callback_query
-        await query.answer()
-        
-        telegram_user_id = update.effective_user.id
-        if telegram_user_id not in user_sessions:
-            await query.answer("❌ Вы не авторизованы")
-            return
-        
-        user_id = user_sessions[telegram_user_id]['user_id']
-        
-        logger.info(f"[TASKS_OVERDUE] ===== CALLBACK RECEIVED =====")
-        logger.info(f"[TASKS_OVERDUE] Getting overdue tasks for user_id: {user_id}, telegram_user_id: {telegram_user_id}")
-        tasks = get_overdue_tasks(user_id)
-        logger.info(f"[TASKS_OVERDUE] Found {len(tasks)} overdue tasks after filtering")
-        
-        if not tasks:
-            await query.edit_message_text(
-                "✅ Просроченных задач нет!",
-                reply_markup=get_tasks_menu()
-            )
-            return
-        
-        message = f"⚠️ Просроченные задачи ({len(tasks)}):\n\n"
-        keyboard = []
-        for task in tasks[:10]:  # Ограничиваем 10 задачами
-            task_id = task.get('id', '')
-            task_title = task.get('title', 'Без названия')[:30]
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"⚠️ {task_title}",
-                    callback_data=f"task_{task_id}"
-                )
-            ])
-        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
-        
-        await query.edit_message_text(
-            message,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    except KeyError as e:
-        logger.error(f"Error in tasks_overdue (KeyError): {e}", exc_info=True)
-        try:
-            await query.edit_message_text(
-                "❌ Ошибка авторизации. Попробуйте /start",
-                reply_markup=get_tasks_menu()
-            )
-        except:
-            pass
-    except Exception as e:
-        logger.error(f"Error in tasks_overdue: {e}", exc_info=True)
-        try:
-            await query.edit_message_text(
-                "❌ Произошла ошибка при получении задач. Попробуйте еще раз.",
-                reply_markup=get_tasks_menu()
-            )
-        except:
-            pass
-
-@require_auth
 async def tasks_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Все задачи пользователя"""
     query = update.callback_query
@@ -383,42 +259,126 @@ async def tasks_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     all_user_tasks = get_user_tasks(user_id)
     
-    # Фильтруем выполненные задачи
-    tasks = []
-    for task in all_user_tasks:
-        status = task.get('status', '').lower()
-        # Исключаем выполненные задачи
-        if status not in ['выполнено', 'done', 'завершено', 'completed']:
-            tasks.append(task)
-    
-    users = firebase.get_all('users')
-    projects = firebase.get_all('projects')
-    
-    if not tasks:
+    if not all_user_tasks:
         await query.edit_message_text(
             "✅ У вас нет активных задач!",
             reply_markup=get_tasks_menu()
         )
         return
     
-    message = f"📋 Все ваши задачи ({len(tasks)}):\n\n"
-    keyboard = []
-    for task in tasks[:20]:  # Ограничиваем 20 задачами
-        task_id = task.get('id', '')
-        task_title = task.get('title', 'Без названия')[:30]
-        status = task.get('status', '')
-        keyboard.append([
-            InlineKeyboardButton(
-                f"📋 {task_title} ({status})",
-                callback_data=f"task_{task_id}"
-            )
-        ])
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
+    # Показываем список с фильтрами (по умолчанию "all")
+    await show_tasks_list(query, all_user_tasks, 'all', 0)
+
+@require_auth
+async def tasks_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Фильтрация задач"""
+    query = update.callback_query
+    await query.answer()
     
-    await query.edit_message_text(
-        message,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    telegram_user_id = update.effective_user.id
+    user_id = user_sessions[telegram_user_id]['user_id']
+    
+    # Парсим callback_data: tasks_filter_{filter_type}_{page}
+    data = query.data.split('_')
+    filter_type = data[2]  # all, today, overdue
+    page = int(data[3]) if len(data) > 3 else 0
+    
+    # Получаем все задачи
+    all_user_tasks = get_user_tasks(user_id)
+    
+    # Применяем фильтр
+    filtered_tasks = []
+    if filter_type == 'today':
+        filtered_tasks = get_today_tasks(user_id)
+    elif filter_type == 'overdue':
+        filtered_tasks = get_overdue_tasks(user_id)
+    else:  # all
+        filtered_tasks = all_user_tasks
+    
+    await show_tasks_list(query, filtered_tasks, filter_type, page)
+
+@require_auth
+async def tasks_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Навигация по страницам задач"""
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_user_id = update.effective_user.id
+    user_id = user_sessions[telegram_user_id]['user_id']
+    
+    # Парсим callback_data: tasks_page_{filter_type}_{page}
+    data = query.data.split('_')
+    filter_type = data[2]  # all, today, overdue
+    page = int(data[3]) if len(data) > 3 else 0
+    
+    # Получаем все задачи
+    all_user_tasks = get_user_tasks(user_id)
+    
+    # Применяем фильтр
+    filtered_tasks = []
+    if filter_type == 'today':
+        filtered_tasks = get_today_tasks(user_id)
+    elif filter_type == 'overdue':
+        filtered_tasks = get_overdue_tasks(user_id)
+    else:  # all
+        filtered_tasks = all_user_tasks
+    
+    await show_tasks_list(query, filtered_tasks, filter_type, page)
+
+async def show_tasks_list(query, tasks: list, filter_type: str, page: int):
+    """Показать список задач с фильтрами и навигацией"""
+    page_size = 10
+    start_idx = page * page_size
+    end_idx = start_idx + page_size
+    total = len(tasks)
+    
+    # Формируем сообщение
+    filter_names = {
+        'all': 'Все задачи',
+        'today': 'Задачи на сегодня',
+        'overdue': 'Просроченные задачи'
+    }
+    filter_name = filter_names.get(filter_type, 'Все задачи')
+    
+    message = f"📋 {filter_name} ({total}):\n\n"
+    
+    if total == 0:
+        message += "✅ Задач не найдено"
+    else:
+        page_tasks = tasks[start_idx:end_idx]
+        for i, task in enumerate(page_tasks, start=start_idx + 1):
+            task_title = task.get('title', 'Без названия')
+            end_date = task.get('endDate', '')
+            status = task.get('status', 'Не начато')
+            
+            # Форматируем дату если есть
+            date_str = ""
+            if end_date:
+                try:
+                    if 'T' in end_date:
+                        end_date = end_date.split('T')[0]
+                    elif ' ' in end_date:
+                        end_date = end_date.split(' ')[0]
+                    from datetime import datetime
+                    date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+                    date_str = f" | 📅 {date_obj.strftime('%d.%m.%Y')}"
+                except:
+                    date_str = f" | 📅 {end_date}"
+            
+            message += f"{i}. {task_title}{date_str}\n   Статус: {status}\n\n"
+        
+        if total > page_size:
+            message += f"\nСтраница {page + 1} из {(total + page_size - 1) // page_size}"
+    
+    keyboard = get_tasks_list_keyboard(tasks, filter_type, page, page_size)
+    
+    try:
+        await query.edit_message_text(
+            message,
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.error(f"Error showing tasks list: {e}", exc_info=True)
 
 @require_auth
 async def task_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2421,9 +2381,9 @@ def main():
     # Это критически важно для правильной обработки callback_query
     application.add_handler(CallbackQueryHandler(menu_main, pattern='^menu_main$'))
     application.add_handler(CallbackQueryHandler(menu_tasks, pattern='^menu_tasks$'))
-    application.add_handler(CallbackQueryHandler(tasks_today, pattern='^tasks_today$'))
-    application.add_handler(CallbackQueryHandler(tasks_overdue, pattern='^tasks_overdue$'))
     application.add_handler(CallbackQueryHandler(tasks_all, pattern='^tasks_all$'))
+    application.add_handler(CallbackQueryHandler(tasks_filter, pattern='^tasks_filter_'))
+    application.add_handler(CallbackQueryHandler(tasks_page, pattern='^tasks_page_'))
     application.add_handler(CallbackQueryHandler(task_create, pattern='^task_create$'))
     application.add_handler(CallbackQueryHandler(task_detail, pattern='^task_[^_]+$'))
     application.add_handler(CallbackQueryHandler(task_set_status, pattern='^task_set_status_'))

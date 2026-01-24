@@ -18,12 +18,70 @@ def get_main_menu() -> InlineKeyboardMarkup:
 def get_tasks_menu() -> InlineKeyboardMarkup:
     """Меню задач"""
     keyboard = [
-        [InlineKeyboardButton("📋 Задачи на сегодня", callback_data="tasks_today")],
-        [InlineKeyboardButton("⚠️ Просроченные", callback_data="tasks_overdue")],
         [InlineKeyboardButton("📊 Все задачи", callback_data="tasks_all")],
         [InlineKeyboardButton("➕ Создать задачу", callback_data="task_create")],
         [InlineKeyboardButton("🔙 Назад", callback_data="menu_main")]
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_tasks_list_keyboard(tasks: list, filter_type: str = 'all', page: int = 0, page_size: int = 10) -> InlineKeyboardMarkup:
+    """Клавиатура для списка задач с фильтрами и навигацией"""
+    keyboard = []
+    
+    # Фильтры
+    filter_row = []
+    if filter_type == 'all':
+        filter_row.append(InlineKeyboardButton("✅ Все", callback_data="tasks_filter_all_0"))
+    else:
+        filter_row.append(InlineKeyboardButton("Все", callback_data="tasks_filter_all_0"))
+    
+    if filter_type == 'today':
+        filter_row.append(InlineKeyboardButton("✅ Сегодня", callback_data="tasks_filter_today_0"))
+    else:
+        filter_row.append(InlineKeyboardButton("Сегодня", callback_data="tasks_filter_today_0"))
+    
+    if filter_type == 'overdue':
+        filter_row.append(InlineKeyboardButton("✅ Просроченные", callback_data="tasks_filter_overdue_0"))
+    else:
+        filter_row.append(InlineKeyboardButton("Просроченные", callback_data="tasks_filter_overdue_0"))
+    
+    keyboard.append(filter_row)
+    
+    # Список задач (пагинация)
+    start_idx = page * page_size
+    end_idx = start_idx + page_size
+    page_tasks = tasks[start_idx:end_idx]
+    
+    for task in page_tasks:
+        task_id = task.get('id', '')
+        task_title = task.get('title', 'Без названия')[:40]
+        # Добавляем иконку в зависимости от типа
+        icon = "📋"
+        if filter_type == 'overdue':
+            icon = "⚠️"
+        elif filter_type == 'today':
+            icon = "📅"
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{icon} {task_title}",
+                callback_data=f"task_{task_id}"
+            )
+        ])
+    
+    # Навигация
+    nav_row = []
+    if page > 0:
+        nav_row.append(InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_page_{filter_type}_{page-1}"))
+    if end_idx < len(tasks):
+        nav_row.append(InlineKeyboardButton("Вперед ▶️", callback_data=f"tasks_page_{filter_type}_{page+1}"))
+    
+    if nav_row:
+        keyboard.append(nav_row)
+    
+    # Кнопки действий
+    keyboard.append([InlineKeyboardButton("➕ Создать задачу", callback_data="task_create")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
+    
     return InlineKeyboardMarkup(keyboard)
 
 def get_deals_menu() -> InlineKeyboardMarkup:
