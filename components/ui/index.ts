@@ -14,4 +14,5 @@ export { PageLayout } from './PageLayout';
 export { Select } from './Select';
 export { Toast } from './Toast';
 export { Touchable } from './Touchable';
+export { DateInput } from './DateInput';
 

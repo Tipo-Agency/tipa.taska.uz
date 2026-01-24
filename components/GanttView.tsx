@@ -82,14 +82,18 @@ const GanttView: React.FC<GanttViewProps> = ({ tasks, projects, onOpenTask }) =>
   };
 
   const groupedTasks = useMemo(() => {
+      if (!projects || !Array.isArray(projects)) {
+          return [];
+      }
+      
       const groups = projects
           .map(p => ({
               project: p,
-              tasks: tasks.filter(t => t.projectId === p.id && t.startDate && t.endDate)
+              tasks: (tasks || []).filter(t => t && t.projectId === p.id && t.startDate && t.endDate)
           }))
           .filter(g => g.tasks.length > 0);
       
-      const noProjectTasks = tasks.filter(t => !t.projectId && t.startDate && t.endDate);
+      const noProjectTasks = (tasks || []).filter(t => t && !t.projectId && t.startDate && t.endDate);
       if (noProjectTasks.length > 0) {
           groups.push({ project: { id: 'none', name: 'Без модуля' }, tasks: noProjectTasks });
       }

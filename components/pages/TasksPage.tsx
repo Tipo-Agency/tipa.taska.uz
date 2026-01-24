@@ -245,10 +245,13 @@ export const TasksPage: React.FC<TasksPageProps> = ({
             <KanbanBoard
               tasks={filteredTasks}
               users={users}
+              projects={projects}
               statuses={statuses}
-              priorities={priorities}
-              onUpdateTask={onUpdateTask}
-              onDeleteTask={onDeleteTask}
+              tables={tables}
+              isAggregator={true}
+              currentUser={currentUser}
+              businessProcesses={businessProcesses}
+              onUpdateStatus={(id, status) => onUpdateTask(id, { status })}
               onOpenTask={onOpenTask}
             />
           )}
@@ -256,8 +259,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
           {viewMode === ViewMode.GANTT && (
             <GanttView
               tasks={filteredTasks}
-              users={users}
-              onUpdateTask={onUpdateTask}
+              projects={projects}
               onOpenTask={onOpenTask}
             />
           )}

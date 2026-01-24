@@ -139,6 +139,27 @@
         color: #e5e7eb !important;
         border-color: #404040 !important;
       }
+
+      /* Date Input Calendar Styling */
+      input[type="date"] {
+        color-scheme: light;
+      }
+      .dark input[type="date"] {
+        color-scheme: dark;
+      }
+      /* Стилизация нативного календаря */
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        cursor: pointer;
+        opacity: 0;
+        position: absolute;
+        right: 0;
+        width: 100%;
+        height: 100%;
+      }
+      /* Скругление углов календаря */
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        border-radius: 0.5rem;
+      }
     </style>
   <script type="importmap">
 {

@@ -11,13 +11,14 @@ import {
 
 import HomeView from './HomeView';
 import { HomePage } from './pages/HomePage';
+import { TasksPage } from './pages/TasksPage';
+import { ClientsPage } from './pages/ClientsPage';
 import InboxView from './InboxView';
 import SettingsView from './SettingsView';
 import AnalyticsView from './AnalyticsView';
 import DocEditor from './DocEditor';
 import TableView from './TableView'; // Needed for Global Search
 import { TasksView } from './TasksView';
-import { TasksPage } from './pages/TasksPage';
 import { SpacesTabsView } from './SpacesTabsView';
 import { SpaceModule } from './modules/SpaceModule';
 import { CRMModule } from './modules/CRMModule';
@@ -124,6 +125,8 @@ export const AppRouter: React.FC<AppRouterProps> = (props) => {
               }}
               onNavigateToTasks={() => actions.setCurrentView('tasks')}
               onNavigateToMeetings={() => actions.setCurrentView('meetings')}
+              onNavigateToDeals={() => actions.setCurrentView('sales-funnel')}
+              clients={props.clients}
           />
       );
   }

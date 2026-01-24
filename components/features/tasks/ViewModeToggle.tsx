@@ -1,5 +1,5 @@
 /**
- * ViewModeToggle - переключатель режимов отображения (Таблица/Канбан/Гантт)
+ * ViewModeToggle - переключатель режимов отображения (Таблица/Канбан/Гант)
  */
 import React from 'react';
 import { ViewMode } from '../../../types';
@@ -43,7 +43,7 @@ export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({
             : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
         }`}
       >
-        Гантт
+        Гант
       </button>
     </div>
   );

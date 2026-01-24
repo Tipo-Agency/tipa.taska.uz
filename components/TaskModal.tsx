@@ -6,6 +6,7 @@ import { DynamicIcon } from './AppIcons';
 import { STANDARD_CATEGORIES } from './FunctionalityView';
 import { FilePreviewModal } from './FilePreviewModal';
 import { getTodayLocalDate, getDateDaysFromNow, normalizeDateForInput } from '../utils/dateUtils';
+import { DateInput } from './ui/DateInput';
 
 interface TaskModalProps {
   users: User[];
@@ -607,11 +608,11 @@ const TaskModal: React.FC<TaskModalProps> = ({
 
                     {/* Assignee Multiple */}
                     <div className="flex items-center gap-3">
-                        <div className="w-28 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase flex items-center gap-2"><Users size={16}/> Исполнители</div>
+                        <div className="w-28 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase flex items-center gap-2"><Users size={18}/> Исполнители</div>
                         <div className="flex-1 relative" ref={assigneeDropdownRef}>
                             <div 
                                 onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
-                                className="flex items-center gap-2 cursor-pointer bg-gray-50 dark:bg-[#252525] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-[#303030] transition-colors"
+                                className="flex items-center gap-2 cursor-pointer bg-gray-50 dark:bg-[#252525] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 min-h-[44px] hover:bg-gray-100 dark:hover:bg-[#303030] transition-colors"
                             >
                                 {assigneeIds.length > 0 ? (
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -634,7 +635,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                             
                             {/* Custom Dropdown */}
                             {isAssigneeDropdownOpen && (
-                                <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-[#252525] border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20 p-2 max-h-64 overflow-y-auto custom-scrollbar">
+                                <div className="absolute top-full left-0 mt-1 w-full sm:w-64 bg-white dark:bg-[#252525] border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20 p-2 max-h-64 overflow-y-auto custom-scrollbar">
                                     {users.map(u => (
                                         <div 
                                             key={u.id} 
@@ -701,11 +702,19 @@ const TaskModal: React.FC<TaskModalProps> = ({
                     {/* Dates - скрыты для идей */}
                     {taskType !== 'idea' && (
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 col-span-1 md:col-span-2">
-                            <div className="w-full sm:w-28 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase flex items-center gap-2 shrink-0"><CalendarIcon size={16}/> Сроки</div>
+                            <div className="w-full sm:w-28 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase flex items-center gap-2 shrink-0"><CalendarIcon size={18}/> Сроки</div>
                             <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
-                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="flex-1 sm:flex-none bg-gray-50 dark:bg-[#252525] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500/50"/>
-                                <span className="text-gray-400 text-sm shrink-0">➜</span>
-                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="flex-1 sm:flex-none bg-gray-50 dark:bg-[#252525] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500/50"/>
+                                <DateInput
+                                    value={startDate}
+                                    onChange={setStartDate}
+                                    className="flex-1 sm:flex-none"
+                                />
+                                <span className="text-gray-400 dark:text-gray-500 text-sm shrink-0">➜</span>
+                                <DateInput
+                                    value={endDate}
+                                    onChange={setEndDate}
+                                    className="flex-1 sm:flex-none"
+                                />
                             </div>
                         </div>
                     )}

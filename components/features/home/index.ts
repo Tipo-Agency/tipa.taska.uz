@@ -1,7 +1,9 @@
 export { HomeHeader } from './HomeHeader';
 export { QuickActions } from './QuickActions';
+export { CreateEntityButton } from './CreateEntityButton';
 export { MyTasksSection } from './MyTasksSection';
 export { UpcomingMeetings } from './UpcomingMeetings';
+export { NewDealsSection } from './NewDealsSection';
 export { RecentActivity } from './RecentActivity';
 export { StatsCards } from './StatsCards';
 export { NotificationsSection } from './NotificationsSection';

@@ -151,6 +151,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
       }
   };
 
+  if (!statuses || !Array.isArray(statuses) || statuses.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+        Нет статусов для отображения
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="bg-white dark:bg-[#252525] border border-gray-200 dark:border-[#333] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
@@ -185,7 +193,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
                     <div className="flex-1 space-y-2.5 overflow-y-auto custom-scrollbar min-h-[100px] px-0.5">
                       {statusTasks.map(task => {
-                          const project = projects.find(p => p.id === task.projectId);
+                          const project = (projects || []).find(p => p && p.id === task.projectId);
                           const source = isAggregator ? getTaskSource(task) : null;
 
                           return (

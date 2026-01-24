@@ -15,6 +15,7 @@ import {
   FinancePlan,
   PurchaseRequest,
   Deal,
+  Client,
   ContentPost,
   EmployeeInfo,
   Project,
@@ -23,12 +24,12 @@ import {
 } from '../../types';
 import {
   HomeHeader,
-  QuickActions,
+  CreateEntityButton,
   MyTasksSection,
   UpcomingMeetings,
+  NewDealsSection,
   RecentActivity,
   StatsCards,
-  NotificationsSection,
   BirthdayModal,
 } from '../features/home';
 import { Container } from '../ui/Container';
@@ -43,6 +44,7 @@ interface HomePageProps {
   financePlan?: FinancePlan | null;
   purchaseRequests?: PurchaseRequest[];
   deals?: Deal[];
+  clients?: Client[];
   contentPosts?: ContentPost[];
   employeeInfos?: EmployeeInfo[];
   users: User[];
@@ -56,6 +58,7 @@ interface HomePageProps {
   onQuickCreateDeal: () => void;
   onNavigateToTasks: () => void;
   onNavigateToMeetings: () => void;
+  onNavigateToDeals?: () => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -66,6 +69,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   financePlan,
   purchaseRequests = [],
   deals = [],
+  clients = [],
   contentPosts = [],
   employeeInfos = [],
   users,
@@ -79,6 +83,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onQuickCreateDeal,
   onNavigateToTasks,
   onNavigateToMeetings,
+  onNavigateToDeals,
 }) => {
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
 
@@ -114,9 +119,6 @@ export const HomePage: React.FC<HomePageProps> = ({
       (t.assigneeId === currentUser?.id || t.assigneeIds?.includes(currentUser?.id))
   );
 
-  // Непрочитанные уведомления
-  const unreadNotifications = (recentActivity || []).filter(a => a && !a.read);
-
   if (!currentUser) {
     return (
       <PageLayout>
@@ -138,13 +140,13 @@ export const HomePage: React.FC<HomePageProps> = ({
       />
 
       <PageLayout>
-        <Container safeArea className="py-6">
-          <div className="max-w-7xl mx-auto">
+        <Container safeArea className="py-6 overflow-y-auto">
+          <div className="max-w-7xl mx-auto space-y-6">
             {/* Header */}
             <HomeHeader user={currentUser} />
 
-            {/* Quick Actions */}
-            <QuickActions
+            {/* Create Entity Button */}
+            <CreateEntityButton
               onQuickCreateTask={onQuickCreateTask}
               onQuickCreateDeal={onQuickCreateDeal}
               onQuickCreateProcess={onQuickCreateProcess}
@@ -159,10 +161,9 @@ export const HomePage: React.FC<HomePageProps> = ({
             />
 
             {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              {/* Left Column - Tasks and Meetings */}
-              <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* My Tasks */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Left Column - Tasks */}
+              <div className="lg:col-span-1">
                 <MyTasksSection
                   tasks={myTasks}
                   users={users}
@@ -172,8 +173,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onOpenTask={onOpenTask}
                   onViewAll={onNavigateToTasks}
                 />
+              </div>
 
-                {/* Upcoming Meetings */}
+              {/* Middle Column - New Deals and Meetings */}
+              <div className="lg:col-span-1 space-y-4">
+                <NewDealsSection
+                  deals={deals}
+                  clients={clients}
+                  users={users}
+                  onViewAll={onNavigateToDeals || (() => {})}
+                />
+
                 <UpcomingMeetings
                   meetings={meetings}
                   users={users}
@@ -181,10 +191,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 />
               </div>
 
-              {/* Right Column - Notifications */}
+              {/* Right Column - Recent Activity */}
               <div className="lg:col-span-1">
-                <NotificationsSection
-                  notifications={unreadNotifications}
+                <RecentActivity
+                  activities={recentActivity}
                   users={users}
                   onViewAll={onNavigateToInbox}
                 />
