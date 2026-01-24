@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search, Plus, Filter } from 'lucide-react';
+import { Button } from '../ui/Button';
 import { TaskSelect } from '../TaskSelect';
 import { SalesFunnel } from '../../types';
 
@@ -58,30 +59,28 @@ export const ClientsHeader: React.FC<ClientsHeaderProps> = ({
             </div>
           )}
           {activeTab === 'contracts' && onFiltersClick && (
-            <button
+            <Button
+              variant={showFilters || hasActiveFilters ? 'primary' : 'secondary'}
+              size="sm"
+              icon={Filter}
               onClick={onFiltersClick}
-              className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
-                showFilters || hasActiveFilters
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-100 dark:bg-[#252525] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#303030]'
-              }`}
             >
-              <Filter size={16} />
               <span className="hidden sm:inline">Фильтры</span>
               {hasActiveFilters && (
-                <span className="bg-white/20 dark:bg-white/20 text-white px-1.5 py-0.5 rounded text-xs font-semibold">
+                <span className="bg-white/20 dark:bg-white/20 text-white px-1.5 py-0.5 rounded text-xs font-semibold ml-1">
                   {activeFiltersCount}
                 </span>
               )}
-            </button>
+            </Button>
           )}
-          <button
+          <Button
+            variant="primary"
+            size="sm"
+            icon={Plus}
             onClick={onCreateClick}
-            className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center gap-2 shadow-sm min-h-[44px] min-w-[44px]"
           >
-            <Plus size={18} />
             <span className="hidden sm:inline">Создать</span>
-          </button>
+          </Button>
         </div>
       </div>
       

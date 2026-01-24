@@ -13,11 +13,27 @@ def get_user_tasks(user_id: str, include_archived: bool = False) -> List[Dict[st
     """Получить задачи пользователя"""
     try:
         all_tasks = firebase.get_all('tasks')
+        logger.info(f"[TASKS] Total tasks in Firebase: {len(all_tasks) if all_tasks else 0}")
         user_tasks = []
+        
+        if not all_tasks:
+            logger.warning(f"[TASKS] No tasks found in Firebase")
+            return []
         
         for task in all_tasks:
             # Пропускаем архивные задачи
             if task.get('isArchived') and not include_archived:
+                continue
+            
+            # Пропускаем идеи и функции
+            entity_type = task.get('entityType', 'task')
+            if entity_type in ['idea', 'feature']:
+                continue
+            
+            # Пропускаем выполненные задачи
+            status = str(task.get('status', '')).lower().strip()
+            completed_statuses = ['выполнено', 'done', 'завершено', 'completed', 'выполнена', 'завершена']
+            if any(status == s for s in completed_statuses):
                 continue
             
             # Проверяем, назначена ли задача на пользователя
@@ -27,13 +43,16 @@ def get_user_tasks(user_id: str, include_archived: bool = False) -> List[Dict[st
             # Проверяем по assigneeId (может быть строкой или None)
             if assignee_id and str(assignee_id) == str(user_id):
                 user_tasks.append(task)
+                logger.debug(f"[TASKS] Task {task.get('id')} assigned via assigneeId")
             # Проверяем по assigneeIds (массив)
             elif isinstance(assignee_ids, list) and user_id in [str(uid) for uid in assignee_ids if uid]:
                 user_tasks.append(task)
+                logger.debug(f"[TASKS] Task {task.get('id')} assigned via assigneeIds")
         
+        logger.info(f"[TASKS] Found {len(user_tasks)} tasks for user {user_id}")
         return user_tasks
     except Exception as e:
-        print(f"Error getting user tasks: {e}")
+        logger.error(f"[TASKS] Error getting user tasks: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
         return []

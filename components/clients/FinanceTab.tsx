@@ -13,9 +13,13 @@ export const FinanceTab: React.FC<FinanceTabProps> = ({
   clients,
   onOpenContractEdit,
 }) => {
-  const activeContracts = contracts.filter(c => !c.isArchived && c.status === 'active');
-  const totalMRR_UZS = activeContracts.reduce((sum, c) => sum + c.amount, 0);
-  const sortedByDate = [...activeContracts].sort((a, b) => a.paymentDay - b.paymentDay);
+  // Проверяем, что contracts и clients являются массивами
+  const safeContracts = Array.isArray(contracts) ? contracts : [];
+  const safeClients = Array.isArray(clients) ? clients : [];
+  
+  const activeContracts = safeContracts.filter(c => c && !c.isArchived && c.status === 'active');
+  const totalMRR_UZS = activeContracts.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const sortedByDate = [...activeContracts].sort((a, b) => (a.paymentDay || 0) - (b.paymentDay || 0));
 
   return (
     <div className="space-y-6">
@@ -48,7 +52,7 @@ export const FinanceTab: React.FC<FinanceTabProps> = ({
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sortedByDate.map(c => {
-            const client = clients.find(cl => cl.id === c.clientId);
+            const client = safeClients.find(cl => cl && cl.id === c.clientId);
             return (
               <div 
                 key={c.id} 

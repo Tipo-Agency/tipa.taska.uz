@@ -97,13 +97,16 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
   }, [clients, searchQuery, selectedFunnelId]);
 
   const filteredContracts = useMemo(() => {
-    const activeContracts = contracts.filter(c => !c.isArchived);
+    if (!contracts || !Array.isArray(contracts)) {
+      return [];
+    }
+    const activeContracts = contracts.filter(c => c && !c.isArchived);
     return activeContracts.filter(c => {
       if (selectedFunnelId && c.funnelId !== selectedFunnelId) return false;
       
       const matchesSearch = !searchQuery || 
-        c.number.includes(searchQuery) || 
-        clients.some(cl => cl.id === c.clientId && cl.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        (c.number && c.number.includes(searchQuery)) || 
+        clients.some(cl => cl && cl.id === c.clientId && cl.name && cl.name.toLowerCase().includes(searchQuery.toLowerCase()));
       
       const matchesStatus = contractStatusFilter === 'all' || c.status === contractStatusFilter;
       
@@ -189,21 +192,20 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
   };
 
   return (
-    <PageLayout
-      header={
+    <PageLayout>
+      <Container safeArea className="py-4 flex flex-col flex-1">
         <ClientsHeader
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           showFilters={showFilters}
           onToggleFilters={() => setShowFilters(!showFilters)}
-          onCreateClient={handleCreateClient}
+          onCreateClick={handleCreateClient}
           selectedFunnelId={selectedFunnelId}
           onFunnelChange={setSelectedFunnelId}
           salesFunnels={salesFunnels}
+          activeTab={activeTab}
         />
-      }
-    >
-      <Container safeArea className="py-4 flex flex-col flex-1">
+        
         <ClientsTabs
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -231,10 +233,9 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
         {activeTab === 'finance' && (
           <FinanceTab
-            oneTimeDeals={oneTimeDeals}
-            clients={clients}
-            onEditOneTimeDeal={handleEditOneTimeDeal}
-            onDeleteOneTimeDeal={onDeleteOneTimeDeal}
+            contracts={contracts || []}
+            clients={clients || []}
+            onOpenContractEdit={handleEditContract}
           />
         )}
 
