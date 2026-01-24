@@ -293,3 +293,72 @@ def format_successful_deal(deal: Dict[str, Any], client: Optional[Dict[str, Any]
     message += "\n🚀 Продолжаем в том же духе!"
     
     return message
+
+def format_meeting_message(meeting: Dict[str, Any], users: List[Dict[str, Any]]) -> str:
+    """Форматировать сообщение о встрече"""
+    message = f"📅 Встреча #{meeting.get('id', 'N/A')[:8]}\n\n"
+    message += f"<b>Название:</b> {meeting.get('title', 'Без названия')}\n"
+    
+    if meeting.get('date'):
+        try:
+            date_obj = datetime.fromisoformat(meeting.get('date').replace('Z', '+00:00'))
+            message += f"<b>Дата:</b> {date_obj.strftime('%d.%m.%Y')}\n"
+        except:
+            message += f"<b>Дата:</b> {meeting.get('date')}\n"
+    
+    if meeting.get('time'):
+        message += f"<b>Время:</b> {meeting.get('time')}\n"
+    
+    # Участники (используем participantIds из types.ts)
+    participant_ids = meeting.get('participantIds', [])
+    if participant_ids:
+        participant_names = []
+        for participant_id in participant_ids:
+            participant = next((u for u in users if u.get('id') == participant_id), None)
+            if participant:
+                participant_names.append(participant.get('name', 'Неизвестно'))
+        if participant_names:
+            message += f"<b>Участники:</b> {', '.join(participant_names)}\n"
+    
+    if meeting.get('summary'):
+        message += f"\n<b>Описание:</b>\n{meeting.get('summary')[:200]}"
+        if len(meeting.get('summary', '')) > 200:
+            message += "..."
+    
+    return message
+
+def format_document_message(document: Dict[str, Any], users: List[Dict[str, Any]]) -> str:
+    """Форматировать сообщение о документе"""
+    message = f"📄 Документ #{document.get('id', 'N/A')[:8]}\n\n"
+    message += f"<b>Название:</b> {document.get('title', 'Без названия')}\n"
+    
+    if document.get('type'):
+        type_name = 'Ссылка' if document.get('type') == 'link' else 'Внутренний документ'
+        message += f"<b>Тип:</b> {type_name}\n"
+    
+    # Автор (используем createdByUserId из types.ts)
+    author_id = document.get('createdByUserId')
+    if author_id:
+        author = next((u for u in users if u.get('id') == author_id), None)
+        if author:
+            message += f"<b>Автор:</b> {author.get('name', 'Неизвестно')}\n"
+    
+    if document.get('createdAt'):
+        try:
+            created_date = datetime.fromisoformat(document.get('createdAt').replace('Z', '+00:00'))
+            message += f"<b>Дата создания:</b> {created_date.strftime('%d.%m.%Y')}\n"
+        except:
+            pass
+    
+    if document.get('url'):
+        message += f"<b>Ссылка:</b> {document.get('url')}\n"
+    
+    if document.get('content'):
+        # Для внутренних документов показываем первые 200 символов контента
+        content = document.get('content', '')
+        if isinstance(content, str):
+            message += f"\n<b>Содержание:</b>\n{content[:200]}"
+            if len(content) > 200:
+                message += "..."
+    
+    return message

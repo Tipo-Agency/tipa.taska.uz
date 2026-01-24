@@ -29,7 +29,7 @@ from keyboards import (
     get_funnels_keyboard, get_clients_keyboard, get_users_keyboard, get_confirm_keyboard,
     get_back_button
 )
-from messages import format_task_message, format_deal_message
+from messages import format_task_message, format_deal_message, format_meeting_message, format_document_message
 from tasks import (
     get_user_tasks, get_today_tasks, get_overdue_tasks, get_task_by_id,
     update_task_status, create_task, get_statuses
@@ -85,6 +85,8 @@ print(f"[BOT] Bot file path: {BOT_FILE_PATH}", flush=True)
 
 # Состояния для ConversationHandler
 (LOGIN, PASSWORD) = range(2)
+# Состояния для создания задачи из сообщения в группе
+(TASK_FROM_MESSAGE_TITLE, TASK_FROM_MESSAGE_DATE, TASK_FROM_MESSAGE_ASSIGNEE) = range(2, 5)
 
 # Хранилище сессий пользователей (в продакшене использовать Redis)
 user_sessions = {}  # {telegram_user_id: {user_id: str, last_check: datetime}}
@@ -632,6 +634,34 @@ async def deal_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 @require_auth
+async def deal_create_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор воронки при создании сделки"""
+    query = update.callback_query
+    await query.answer()
+    
+    parts = query.data.split('_')
+    funnel_id = parts[3] if len(parts) > 3 else None
+    
+    if not funnel_id:
+        await query.answer("❌ Воронка не указана")
+        return
+    
+    telegram_user_id = update.effective_user.id
+    if telegram_user_id not in user_states:
+        user_states[telegram_user_id] = {'state': 'creating_deal', 'data': {}}
+    
+    user_states[telegram_user_id]['data']['funnelId'] = funnel_id
+    user_states[telegram_user_id]['state'] = 'creating_deal_title'
+    
+    funnel = firebase.get_by_id('salesFunnels', funnel_id)
+    funnel_name = funnel.get('name', '') if funnel else ''
+    
+    await query.edit_message_text(
+        f"➕ Создание новой заявки\n\nВоронка: {funnel_name}\n\nВведите название заявки:",
+        reply_markup=get_back_button("menu_deals")
+    )
+
+@require_auth
 async def deal_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальная информация о сделке"""
     query = update.callback_query
@@ -671,7 +701,7 @@ async def deal_set_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if new_stage == 'won':
                 # Отправляем уведомление в групповой чат
                 notification_prefs = firebase.get_by_id('notificationPrefs', 'default')
-                telegram_chat_id = notification_prefs.get('telegramChatId') if notification_prefs else None
+                telegram_chat_id = notification_prefs.get('telegramGroupChatId') if notification_prefs else None
                 
                 if telegram_chat_id:
                     clients = firebase.get_all('clients')
@@ -681,10 +711,14 @@ async def deal_set_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         try:
                             await context.bot.send_message(
                                 chat_id=telegram_chat_id,
-                                text=message
+                                text=message,
+                                parse_mode='HTML'
                             )
+                            logger.info(f"Successfully sent deal notification to group {telegram_chat_id}")
                         except Exception as e:
                             logger.error(f"Error sending successful deal message: {e}")
+                else:
+                    logger.warning("No telegramGroupChatId configured for deal notifications")
             
             await query.edit_message_text(
                 f"✅ Стадия сделки изменена",
@@ -713,6 +747,42 @@ async def deal_set_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Выберите новую стадию:",
             reply_markup=get_stages_keyboard(stages, deal_id)
         )
+
+@require_auth
+async def deal_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Удалить сделку в архив"""
+    query = update.callback_query
+    await query.answer()
+    
+    parts = query.data.split('_')
+    deal_id = parts[2] if len(parts) > 2 else None
+    
+    if not deal_id:
+        await query.answer("❌ Сделка не указана")
+        return
+    
+    deal = get_deal_by_id(deal_id)
+    if not deal:
+        await query.answer("❌ Сделка не найдена")
+        return
+    
+    # Проверяем, не подтверждено ли удаление
+    if 'confirm' not in query.data:
+        # Показываем подтверждение
+        await query.edit_message_text(
+            f"🗑️ Вы уверены, что хотите удалить сделку '{deal.get('title', deal.get('contactName', 'Без названия'))}' в архив?",
+            reply_markup=get_confirm_keyboard("deal_delete", deal_id, f"deal_delete_{deal_id}_confirm")
+        )
+        return
+    
+    # Удаляем в архив
+    if delete_deal(deal_id):
+        await query.edit_message_text(
+            "✅ Сделка удалена в архив",
+            reply_markup=get_deals_menu()
+        )
+    else:
+        await query.answer("❌ Ошибка при удалении сделки")
 
 @require_auth
 async def menu_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -786,6 +856,543 @@ async def menu_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Используйте кнопки меню для навигации по функциям бота."
     )
     await query.edit_message_text(help_text, reply_markup=get_main_menu())
+
+async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик текстовых сообщений для создания задач и сделок"""
+    telegram_user_id = update.effective_user.id
+    
+    # Проверяем авторизацию
+    if telegram_user_id not in user_sessions:
+        return  # Игнорируем сообщения от неавторизованных пользователей
+    
+    if telegram_user_id not in user_states:
+        return  # Игнорируем сообщения, если пользователь не в процессе создания
+    
+    state = user_states[telegram_user_id].get('state')
+    data = user_states[telegram_user_id].get('data', {})
+    text = update.message.text.strip()
+    
+    try:
+        if state == 'creating_task':
+            # Создаем задачу
+            user_id = user_sessions[telegram_user_id]['user_id']
+            task_data = {
+                'title': text,
+                'assigneeId': user_id,
+                'status': 'New',
+                'priority': 'Medium',
+                'createdByUserId': user_id,
+                'entityType': 'task'
+            }
+            
+            task_id = create_task(task_data)
+            if task_id:
+                await update.message.reply_text(
+                    f"✅ Задача '{text}' создана!",
+                    reply_markup=get_tasks_menu()
+                )
+            else:
+                await update.message.reply_text("❌ Ошибка при создании задачи")
+            
+            del user_states[telegram_user_id]
+            
+        elif state == 'creating_deal_title':
+            # Сохраняем название и запрашиваем описание
+            data['title'] = text
+            user_states[telegram_user_id]['state'] = 'creating_deal_description'
+            await update.message.reply_text(
+                "Введите описание заявки (или отправьте '-' чтобы пропустить):",
+                reply_markup=get_back_button("menu_deals")
+            )
+            
+        elif state == 'creating_deal_description':
+            # Создаем сделку
+            if text != '-':
+                data['description'] = text
+            
+            deal_id = create_deal(data)
+            if deal_id:
+                await update.message.reply_text(
+                    f"✅ Заявка '{data.get('title', '')}' создана!",
+                    reply_markup=get_deals_menu()
+                )
+            else:
+                await update.message.reply_text("❌ Ошибка при создании заявки")
+            
+            del user_states[telegram_user_id]
+            
+    except Exception as e:
+        logger.error(f"Error handling text message: {e}", exc_info=True)
+        await update.message.reply_text("❌ Произошла ошибка. Попробуйте еще раз.")
+        if telegram_user_id in user_states:
+            del user_states[telegram_user_id]
+
+async def handle_bot_mention(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработчик упоминания бота в группе - начало создания задачи из сообщения"""
+    try:
+        # Проверяем, что это сообщение в группе
+        if not update.message or update.message.chat.type not in ['group', 'supergroup']:
+            return ConversationHandler.END
+        
+        # Проверяем, что бот упомянут
+        message = update.message
+        if not message.entities:
+            return ConversationHandler.END
+        
+        # Получаем информацию о боте
+        bot_info = await context.bot.get_me()
+        bot_username = bot_info.username.lower()
+        
+        # Проверяем, есть ли упоминание бота
+        mentioned = False
+        for entity in message.entities:
+            if entity.type == 'mention':
+                mention_text = message.text[entity.offset:entity.offset + entity.length].lower()
+                if mention_text == f'@{bot_username}':
+                    mentioned = True
+                    break
+        
+        if not mentioned:
+            return ConversationHandler.END
+        
+        # Проверяем авторизацию пользователя
+        telegram_user_id = update.effective_user.id
+        if telegram_user_id not in user_sessions:
+            await message.reply_text(
+                "❌ Вы не авторизованы. Используйте /start в личном чате с ботом для авторизации."
+            )
+            return ConversationHandler.END
+        
+        # Сохраняем исходное сообщение в context.user_data
+        original_text = message.text or message.caption or ""
+        # Удаляем упоминание бота из текста
+        for entity in reversed(message.entities):
+            if entity.type == 'mention':
+                mention_text = message.text[entity.offset:entity.offset + entity.length].lower()
+                if mention_text == f'@{bot_username}':
+                    original_text = (original_text[:entity.offset] + original_text[entity.offset + entity.length:]).strip()
+        
+        context.user_data['original_message'] = original_text
+        context.user_data['original_message_id'] = message.message_id
+        context.user_data['chat_id'] = message.chat.id
+        
+        # Запрашиваем название задачи
+        await message.reply_text(
+            f"📋 Создание задачи из сообщения:\n\n"
+            f"💬 Исходное сообщение: {original_text[:200]}{'...' if len(original_text) > 200 else ''}\n\n"
+            f"Введите название задачи:"
+        )
+        
+        return TASK_FROM_MESSAGE_TITLE
+        
+    except Exception as e:
+        logger.error(f"Error handling bot mention: {e}", exc_info=True)
+        return ConversationHandler.END
+
+async def task_from_message_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка названия задачи из сообщения"""
+    try:
+        title = update.message.text.strip()
+        if not title:
+            await update.message.reply_text("❌ Название не может быть пустым. Введите название задачи:")
+            return TASK_FROM_MESSAGE_TITLE
+        
+        context.user_data['task_title'] = title
+        
+        # Запрашиваем срок выполнения
+        await update.message.reply_text(
+            f"📅 Название задачи: {title}\n\n"
+            f"Введите срок выполнения в формате ДД.ММ.ГГГГ (например, 25.01.2026)\n"
+            f"Или отправьте '-' для использования сегодняшней даты:"
+        )
+        
+        return TASK_FROM_MESSAGE_DATE
+        
+    except Exception as e:
+        logger.error(f"Error in task_from_message_title: {e}", exc_info=True)
+        await update.message.reply_text("❌ Произошла ошибка. Попробуйте еще раз.")
+        return ConversationHandler.END
+
+async def task_from_message_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка срока выполнения задачи"""
+    try:
+        date_input = update.message.text.strip()
+        
+        from datetime import datetime
+        from utils import get_today_date
+        
+        if date_input == '-':
+            end_date = get_today_date()
+        else:
+            try:
+                # Парсим дату в формате ДД.ММ.ГГГГ
+                date_obj = datetime.strptime(date_input, '%d.%m.%Y')
+                end_date = date_obj.date().isoformat()
+            except ValueError:
+                await update.message.reply_text(
+                    "❌ Неверный формат даты. Используйте формат ДД.ММ.ГГГГ (например, 25.01.2026):"
+                )
+                return TASK_FROM_MESSAGE_DATE
+        
+        context.user_data['task_end_date'] = end_date
+        
+        # Получаем список пользователей для выбора исполнителя
+        users = firebase.get_all('users')
+        active_users = [u for u in users if not u.get('isArchived')]
+        
+        if not active_users:
+            await update.message.reply_text("❌ Нет доступных пользователей для назначения.")
+            return ConversationHandler.END
+        
+        # Создаем клавиатуру для выбора исполнителя
+        keyboard = []
+        for user in active_users[:10]:  # Ограничиваем до 10 пользователей
+            keyboard.append([
+                InlineKeyboardButton(
+                    user.get('name', user.get('id', 'Неизвестно')),
+                    callback_data=f"task_from_msg_assignee_{user.get('id')}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton("🔙 Отмена", callback_data="task_from_msg_cancel")])
+        
+        await update.message.reply_text(
+            f"📅 Срок выполнения: {date_input if date_input != '-' else 'Сегодня'}\n\n"
+            f"Выберите исполнителя:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        return TASK_FROM_MESSAGE_ASSIGNEE
+        
+    except Exception as e:
+        logger.error(f"Error in task_from_message_date: {e}", exc_info=True)
+        await update.message.reply_text("❌ Произошла ошибка. Попробуйте еще раз.")
+        return ConversationHandler.END
+
+async def task_from_message_assignee_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка выбора исполнителя через callback"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data == "task_from_msg_cancel":
+            await query.edit_message_text("❌ Создание задачи отменено.")
+            return ConversationHandler.END
+        
+        if query.data.startswith("task_from_msg_assignee_"):
+            assignee_id = query.data.replace("task_from_msg_assignee_", "")
+            
+            # Получаем данные из context.user_data
+            original_message = context.user_data.get('original_message', '')
+            task_title = context.user_data.get('task_title', '')
+            task_end_date = context.user_data.get('task_end_date', '')
+            telegram_user_id = query.from_user.id
+            
+            if telegram_user_id not in user_sessions:
+                await query.edit_message_text("❌ Вы не авторизованы.")
+                return ConversationHandler.END
+            
+            user_id = user_sessions[telegram_user_id]['user_id']
+            
+            # Создаем задачу
+            from utils import get_today_date
+            task_data = {
+                'title': task_title,
+                'description': original_message,
+                'assigneeId': assignee_id,
+                'status': 'New',
+                'priority': 'Medium',
+                'createdByUserId': user_id,
+                'entityType': 'task',
+                'startDate': get_today_date(),
+                'endDate': task_end_date
+            }
+            
+            task_id = create_task(task_data)
+            
+            if task_id:
+                # Получаем имя исполнителя
+                users = firebase.get_all('users')
+                assignee = next((u for u in users if u.get('id') == assignee_id), None)
+                assignee_name = assignee.get('name', 'Неизвестно') if assignee else 'Неизвестно'
+                
+                await query.edit_message_text(
+                    f"✅ Задача создана!\n\n"
+                    f"📋 Название: {task_title}\n"
+                    f"👤 Исполнитель: {assignee_name}\n"
+                    f"📅 Срок: {task_end_date}\n"
+                    f"💬 Описание: {original_message[:100]}{'...' if len(original_message) > 100 else ''}"
+                )
+            else:
+                await query.edit_message_text("❌ Ошибка при создании задачи.")
+            
+            # Очищаем данные
+            context.user_data.pop('original_message', None)
+            context.user_data.pop('original_message_id', None)
+            context.user_data.pop('chat_id', None)
+            context.user_data.pop('task_title', None)
+            context.user_data.pop('task_end_date', None)
+            
+            return ConversationHandler.END
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error in task_from_message_assignee_callback: {e}", exc_info=True)
+        try:
+            await query.edit_message_text("❌ Произошла ошибка. Попробуйте еще раз.")
+        except:
+            pass
+        return ConversationHandler.END
+
+@require_auth
+async def show_task_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /task <id или название> - показать задачу в группе"""
+    try:
+        # Проверяем, что это команда в группе
+        if not update.message or update.message.chat.type not in ['group', 'supergroup']:
+            return
+        
+        # Получаем аргумент команды (ID или название)
+        if not context.args or len(context.args) == 0:
+            await update.message.reply_text("❌ Использование: /task <id или название>\nПример: /task task-123456\nПример: /task Подготовить презентацию")
+            return
+        
+        search_query = ' '.join(context.args).strip()
+        
+        # Сначала пытаемся найти по ID
+        task = get_task_by_id(search_query)
+        
+        # Если не найдено по ID, ищем по названию
+        if not task:
+            all_tasks = firebase.get_all('tasks')
+            matching_tasks = []
+            search_lower = search_query.lower()
+            
+            for t in all_tasks:
+                if t.get('isArchived'):
+                    continue
+                title = t.get('title', '').lower()
+                if search_lower in title or title in search_lower:
+                    matching_tasks.append(t)
+            
+            if len(matching_tasks) == 0:
+                await update.message.reply_text(f"❌ Задача с ID или названием '{search_query}' не найдена.")
+                return
+            elif len(matching_tasks) == 1:
+                task = matching_tasks[0]
+            else:
+                # Показываем список найденных задач
+                message = f"🔍 Найдено несколько задач ({len(matching_tasks)}):\n\n"
+                for i, t in enumerate(matching_tasks[:10], 1):
+                    message += f"{i}. {t.get('title', 'Без названия')} (ID: {t.get('id', 'N/A')[:12]})\n"
+                if len(matching_tasks) > 10:
+                    message += f"\n... и еще {len(matching_tasks) - 10} задач"
+                message += "\n\nИспользуйте ID для точного поиска."
+                await update.message.reply_text(message)
+                return
+        
+        # Получаем данные для форматирования
+        users = firebase.get_all('users')
+        projects = firebase.get_all('projects')
+        
+        # Форматируем сообщение
+        message = format_task_message(task, users, projects)
+        
+        await update.message.reply_text(message, parse_mode='HTML')
+        
+    except Exception as e:
+        logger.error(f"Error in show_task_in_group: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ Произошла ошибка при получении задачи.")
+        except:
+            pass
+
+@require_auth
+async def show_deal_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /deal <id или название> - показать сделку в группе"""
+    try:
+        # Проверяем, что это команда в группе
+        if not update.message or update.message.chat.type not in ['group', 'supergroup']:
+            return
+        
+        # Получаем аргумент команды (ID или название)
+        if not context.args or len(context.args) == 0:
+            await update.message.reply_text("❌ Использование: /deal <id или название>\nПример: /deal deal-123456\nПример: /deal Новая заявка")
+            return
+        
+        search_query = ' '.join(context.args).strip()
+        
+        # Сначала пытаемся найти по ID
+        deal = get_deal_by_id(search_query)
+        
+        # Если не найдено по ID, ищем по названию
+        if not deal:
+            all_deals = get_all_deals(include_archived=False)
+            matching_deals = []
+            search_lower = search_query.lower()
+            
+            for d in all_deals:
+                title = d.get('title', d.get('contactName', '')).lower()
+                if search_lower in title or title in search_lower:
+                    matching_deals.append(d)
+            
+            if len(matching_deals) == 0:
+                await update.message.reply_text(f"❌ Сделка с ID или названием '{search_query}' не найдена.")
+                return
+            elif len(matching_deals) == 1:
+                deal = matching_deals[0]
+            else:
+                # Показываем список найденных сделок
+                message = f"🔍 Найдено несколько сделок ({len(matching_deals)}):\n\n"
+                for i, d in enumerate(matching_deals[:10], 1):
+                    title = d.get('title', d.get('contactName', 'Без названия'))
+                    message += f"{i}. {title} (ID: {d.get('id', 'N/A')[:12]})\n"
+                if len(matching_deals) > 10:
+                    message += f"\n... и еще {len(matching_deals) - 10} сделок"
+                message += "\n\nИспользуйте ID для точного поиска."
+                await update.message.reply_text(message)
+                return
+        
+        # Получаем данные для форматирования
+        clients = firebase.get_all('clients')
+        users = firebase.get_all('users')
+        funnels = get_sales_funnels()
+        
+        # Форматируем сообщение
+        message = format_deal_message(deal, clients, users, funnels)
+        
+        await update.message.reply_text(message, parse_mode='HTML')
+        
+    except Exception as e:
+        logger.error(f"Error in show_deal_in_group: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ Произошла ошибка при получении сделки.")
+        except:
+            pass
+
+@require_auth
+async def show_meeting_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /meeting <id или название> - показать встречу в группе"""
+    try:
+        # Проверяем, что это команда в группе
+        if not update.message or update.message.chat.type not in ['group', 'supergroup']:
+            return
+        
+        # Получаем аргумент команды (ID или название)
+        if not context.args or len(context.args) == 0:
+            await update.message.reply_text("❌ Использование: /meeting <id или название>\nПример: /meeting meeting-123456\nПример: /meeting Планерка")
+            return
+        
+        search_query = ' '.join(context.args).strip()
+        
+        # Сначала пытаемся найти по ID
+        meeting = firebase.get_by_id('meetings', search_query)
+        
+        # Если не найдено по ID, ищем по названию
+        if not meeting:
+            all_meetings = firebase.get_all('meetings')
+            matching_meetings = []
+            search_lower = search_query.lower()
+            
+            for m in all_meetings:
+                if m.get('isArchived'):
+                    continue
+                title = m.get('title', '').lower()
+                if search_lower in title or title in search_lower:
+                    matching_meetings.append(m)
+            
+            if len(matching_meetings) == 0:
+                await update.message.reply_text(f"❌ Встреча с ID или названием '{search_query}' не найдена.")
+                return
+            elif len(matching_meetings) == 1:
+                meeting = matching_meetings[0]
+            else:
+                # Показываем список найденных встреч
+                message = f"🔍 Найдено несколько встреч ({len(matching_meetings)}):\n\n"
+                for i, m in enumerate(matching_meetings[:10], 1):
+                    message += f"{i}. {m.get('title', 'Без названия')} (ID: {m.get('id', 'N/A')[:12]})\n"
+                if len(matching_meetings) > 10:
+                    message += f"\n... и еще {len(matching_meetings) - 10} встреч"
+                message += "\n\nИспользуйте ID для точного поиска."
+                await update.message.reply_text(message)
+                return
+        
+        # Получаем данные для форматирования
+        users = firebase.get_all('users')
+        
+        # Форматируем сообщение
+        message = format_meeting_message(meeting, users)
+        
+        await update.message.reply_text(message, parse_mode='HTML')
+        
+    except Exception as e:
+        logger.error(f"Error in show_meeting_in_group: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ Произошла ошибка при получении встречи.")
+        except:
+            pass
+
+@require_auth
+async def show_document_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /document <id или название> - показать документ в группе"""
+    try:
+        # Проверяем, что это команда в группе
+        if not update.message or update.message.chat.type not in ['group', 'supergroup']:
+            return
+        
+        # Получаем аргумент команды (ID или название)
+        if not context.args or len(context.args) == 0:
+            await update.message.reply_text("❌ Использование: /document <id или название>\nПример: /document doc-123456\nПример: /document Договор")
+            return
+        
+        search_query = ' '.join(context.args).strip()
+        
+        # Сначала пытаемся найти по ID
+        document = firebase.get_by_id('docs', search_query)
+        
+        # Если не найдено по ID, ищем по названию
+        if not document:
+            all_docs = firebase.get_all('docs')
+            matching_docs = []
+            search_lower = search_query.lower()
+            
+            for d in all_docs:
+                if d.get('isArchived'):
+                    continue
+                title = d.get('title', '').lower()
+                if search_lower in title or title in search_lower:
+                    matching_docs.append(d)
+            
+            if len(matching_docs) == 0:
+                await update.message.reply_text(f"❌ Документ с ID или названием '{search_query}' не найден.")
+                return
+            elif len(matching_docs) == 1:
+                document = matching_docs[0]
+            else:
+                # Показываем список найденных документов
+                message = f"🔍 Найдено несколько документов ({len(matching_docs)}):\n\n"
+                for i, d in enumerate(matching_docs[:10], 1):
+                    message += f"{i}. {d.get('title', 'Без названия')} (ID: {d.get('id', 'N/A')[:12]})\n"
+                if len(matching_docs) > 10:
+                    message += f"\n... и еще {len(matching_docs) - 10} документов"
+                message += "\n\nИспользуйте ID для точного поиска."
+                await update.message.reply_text(message)
+                return
+        
+        # Получаем данные для форматирования
+        users = firebase.get_all('users')
+        
+        # Форматируем сообщение
+        message = format_document_message(document, users)
+        
+        await update.message.reply_text(message, parse_mode='HTML')
+        
+    except Exception as e:
+        logger.error(f"Error in show_document_in_group: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ Произошла ошибка при получении документа.")
+        except:
+            pass
 
 async def periodic_check(context: ContextTypes.DEFAULT_TYPE):
     """Периодическая проверка новых задач, заявок и т.д."""
@@ -933,6 +1540,20 @@ def main():
     application.add_handler(CallbackQueryHandler(log_update), group=-1)
     logger.info("[BOT] Logging handlers registered in group -1 (will see ALL updates)")
     
+    # ConversationHandler для создания задачи из сообщения в группе
+    # Фильтр для групповых чатов - проверка выполняется внутри handle_bot_mention
+    task_from_message_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT, handle_bot_mention)],
+        states={
+            TASK_FROM_MESSAGE_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_from_message_title)],
+            TASK_FROM_MESSAGE_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_from_message_date)],
+            TASK_FROM_MESSAGE_ASSIGNEE: [CallbackQueryHandler(task_from_message_assignee_callback)],
+        },
+        fallbacks=[CommandHandler('cancel', lambda u, c: ConversationHandler.END)],
+        name="task_from_message",
+        persistent=False,
+    )
+    
     # ConversationHandler для авторизации
     # Работает в приватных чатах (по умолчанию команды работают только в приватных чатах)
     auth_handler = ConversationHandler(
@@ -945,9 +1566,16 @@ def main():
     )
     
     # Регистрируем обработчики
+    application.add_handler(task_from_message_handler)
     application.add_handler(auth_handler)
     application.add_handler(CommandHandler('logout', logout))
     application.add_handler(CommandHandler('help', help_command))
+    
+    # Команды для работы в группах (показывают сущности)
+    application.add_handler(CommandHandler('task', show_task_in_group))
+    application.add_handler(CommandHandler('deal', show_deal_in_group))
+    application.add_handler(CommandHandler('meeting', show_meeting_in_group))
+    application.add_handler(CommandHandler('document', show_document_in_group))
     
     # Регистрируем обработчик ошибок
     application.add_error_handler(error_handler)

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Deal, Client, User, Comment, Task, Project, SalesFunnel } from '../types';
-import { Plus, KanbanSquare, List as ListIcon, X, Send, MessageSquare, Instagram, Globe, UserPlus, Bot, Edit2, TrendingUp, CheckSquare, CheckCircle2, XCircle } from 'lucide-react';
+import { Plus, KanbanSquare, List as ListIcon, X, Send, MessageSquare, Instagram, Globe, UserPlus, Bot, Edit2, TrendingUp, CheckSquare, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { sendClientMessage } from '../services/telegramService';
 import { instagramService } from '../services/instagramService';
 import { DynamicIcon } from './AppIcons';
@@ -707,7 +707,24 @@ const SalesFunnelView: React.FC<SalesFunnelViewProps> = ({ deals, clients, users
                                   </button>
                               </div>
                               
-                              <Button type="submit" size="md" fullWidth>Сохранить</Button>
+                              {/* Кнопка удаления в архив */}
+                              {editingDeal && (
+                                  <button 
+                                      type="button"
+                                      onClick={() => {
+                                          if (window.confirm('Удалить сделку в архив?')) {
+                                              onDeleteDeal(editingDeal.id);
+                                              setIsModalOpen(false);
+                                          }
+                                      }}
+                                      className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 mt-2"
+                                  >
+                                      <Trash2 size={18} />
+                                      <span>Удалить в архив</span>
+                                  </button>
+                              )}
+                              
+                              <Button type="submit" size="md" fullWidth className="mt-2">Сохранить</Button>
                           </form>
                       </div>
                       {/* Правая панель - вкладки */}
