@@ -105,19 +105,26 @@ check_status() {
     fi
     
     # 5. Проверка getUpdates (409 ошибка)
+    # ВАЖНО: Не делаем getUpdates если сервис запущен - это вызовет конфликт!
     echo ""
     echo "5️⃣ Проверка getUpdates:"
-    GETUPDATES_RESPONSE=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?timeout=1" 2>/dev/null || echo "")
-    if echo "$GETUPDATES_RESPONSE" | grep -q '"ok":true'; then
-        echo "   ✅ getUpdates: OK (нет ошибки 409)"
-        UPDATE_COUNT=$(echo "$GETUPDATES_RESPONSE" | python3 -c "import sys, json; print(len(json.load(sys.stdin).get('result', [])))" 2>/dev/null || echo "0")
-        echo "   Обновлений в очереди: $UPDATE_COUNT"
-    elif echo "$GETUPDATES_RESPONSE" | grep -q "409"; then
-        echo "   ❌ getUpdates: 409 CONFLICT ERROR!"
-        echo "   Это означает, что запущено несколько экземпляров бота!"
+    if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        echo "   ⚠️ Сервис запущен - пропускаем getUpdates (чтобы избежать конфликта 409)"
+        echo "   Для проверки getUpdates остановите сервис: sudo systemctl stop $SERVICE_NAME"
     else
-        echo "   ⚠️ getUpdates: Неожиданный ответ"
-        echo "   Response: $(echo "$GETUPDATES_RESPONSE" | head -3)"
+        echo "   Сервис остановлен - можно безопасно проверить getUpdates..."
+        GETUPDATES_RESPONSE=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?timeout=1" 2>/dev/null || echo "")
+        if echo "$GETUPDATES_RESPONSE" | grep -q '"ok":true'; then
+            echo "   ✅ getUpdates: OK (нет ошибки 409)"
+            UPDATE_COUNT=$(echo "$GETUPDATES_RESPONSE" | python3 -c "import sys, json; print(len(json.load(sys.stdin).get('result', [])))" 2>/dev/null || echo "0")
+            echo "   Обновлений в очереди: $UPDATE_COUNT"
+        elif echo "$GETUPDATES_RESPONSE" | grep -q "409"; then
+            echo "   ❌ getUpdates: 409 CONFLICT ERROR!"
+            echo "   Это означает, что запущено несколько экземпляров бота!"
+        else
+            echo "   ⚠️ getUpdates: Неожиданный ответ"
+            echo "   Response: $(echo "$GETUPDATES_RESPONSE" | head -3)"
+        fi
     fi
     
     # 6. Логи (последние 10 строк)
@@ -235,16 +242,23 @@ fix_issues() {
     echo "   Владелец директории: $DEPLOY_USER"
     
     # 5. Очистка очереди Telegram (ВАЖНО!)
+    # ВАЖНО: Очистка очереди делается ТОЛЬКО если сервис остановлен!
     echo ""
     echo "5️⃣ Очистка очереди обновлений Telegram..."
-    echo "   Отправляем getUpdates с offset=-1 для очистки..."
-    CLEAR_RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=-1" 2>/dev/null || echo "")
-    if echo "$CLEAR_RESPONSE" | grep -q '"ok":true'; then
-        echo "   ✅ Очередь очищена"
+    if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        echo "   ⚠️ Сервис запущен - пропускаем очистку очереди (чтобы избежать конфликта 409)"
+        echo "   Очередь будет очищена автоматически при следующем запуске бота"
     else
-        echo "   ⚠️ Не удалось очистить очередь: $(echo "$CLEAR_RESPONSE" | head -3)"
+        echo "   Сервис остановлен - очищаем очередь обновлений..."
+        echo "   Отправляем getUpdates с offset=-1 для очистки..."
+        CLEAR_RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=-1" 2>/dev/null || echo "")
+        if echo "$CLEAR_RESPONSE" | grep -q '"ok":true'; then
+            echo "   ✅ Очередь очищена"
+        else
+            echo "   ⚠️ Не удалось очистить очередь: $(echo "$CLEAR_RESPONSE" | head -3)"
+        fi
+        sleep 2
     fi
-    sleep 2
     
     # 6. Запуск бота
     echo ""
@@ -266,16 +280,38 @@ fix_issues() {
         echo "   Проверьте логи: sudo journalctl -u $SERVICE_NAME -n 50"
     fi
     
-    # 7. Проверка подключения к Telegram
+    # 7. Проверка подключения к Telegram (только если сервис запущен)
     echo ""
     echo "7️⃣ Проверка подключения к Telegram API..."
     sleep 3
-    GETUPDATES_RESPONSE=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?timeout=1" 2>/dev/null || echo "")
-    if echo "$GETUPDATES_RESPONSE" | grep -q '"ok":true'; then
-        echo "   ✅ getUpdates: OK (нет ошибки 409)"
-    elif echo "$GETUPDATES_RESPONSE" | grep -q "409"; then
-        echo "   ❌ getUpdates: 409 CONFLICT ERROR!"
-        echo "   Все еще есть несколько экземпляров бота"
+    # ВАЖНО: Не делаем getUpdates если сервис запущен - это вызовет конфликт!
+    # Вместо этого проверяем только getMe и getWebhookInfo
+    GETME_RESPONSE=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getMe" 2>/dev/null || echo "")
+    if echo "$GETME_RESPONSE" | grep -q '"ok":true'; then
+        echo "   ✅ getMe: OK (бот доступен)"
+        BOT_USERNAME=$(echo "$GETME_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['result']['username'])" 2>/dev/null || echo "unknown")
+        echo "   Bot username: @$BOT_USERNAME"
+    else
+        echo "   ❌ getMe: FAILED"
+    fi
+    
+    # Проверяем webhook (если установлен - polling не будет работать)
+    WEBHOOK_RESPONSE=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo" 2>/dev/null || echo "")
+    if echo "$WEBHOOK_RESPONSE" | grep -q '"ok":true'; then
+        WEBHOOK_URL=$(echo "$WEBHOOK_RESPONSE" | python3 -c "import sys, json; url=json.load(sys.stdin)['result'].get('url', ''); print(url if url else 'not set')" 2>/dev/null || echo "unknown")
+        if [ "$WEBHOOK_URL" != "not set" ] && [ -n "$WEBHOOK_URL" ]; then
+            echo "   ⚠️ Webhook установлен: $WEBHOOK_URL"
+            echo "   Если используется webhook, polling не будет работать!"
+        else
+            echo "   ✅ Webhook не установлен (polling должен работать)"
+        fi
+    fi
+    
+    # Проверяем логи на наличие ошибок 409
+    CONFLICT_IN_LOGS=$(sudo journalctl -u "$SERVICE_NAME" -n 20 --no-pager 2>/dev/null | grep -i "409\|conflict" | tail -3 || echo "")
+    if [ -n "$CONFLICT_IN_LOGS" ]; then
+        echo "   ⚠️ Найдены ошибки 409/Conflict в последних логах:"
+        echo "$CONFLICT_IN_LOGS" | sed 's/^/   /'
         echo ""
         echo "   🔍 Возможные причины:"
         echo "   1. Другой бот с тем же токеном запущен на другом сервере"
@@ -288,7 +324,7 @@ fix_issues() {
         echo "   3. Проверьте все systemd сервисы: systemctl list-units --type=service | grep bot"
         echo "   4. Попробуйте еще раз через минуту: sudo ./fix-bot.sh"
     else
-        echo "   ⚠️ getUpdates: Неожиданный ответ"
+        echo "   ✅ Ошибок 409/Conflict в последних логах нет"
     fi
     
     # 9. Проверка логов на наличие ошибок Conflict

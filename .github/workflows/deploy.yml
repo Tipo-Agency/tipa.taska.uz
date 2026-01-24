@@ -95,6 +95,44 @@ jobs:
               sudo chown $USER:$USER .env || true
               chmod 600 .env || true
               
+              # Обновляем systemd сервис с EnvironmentFile
+              echo "🔧 Updating systemd service with EnvironmentFile..."
+              if [ -f "telegram-bot.service" ]; then
+                echo "   Copying telegram-bot.service to /etc/systemd/system/..."
+                sudo cp telegram-bot.service /etc/systemd/system/telegram-bot.service
+                sudo chmod 644 /etc/systemd/system/telegram-bot.service
+                echo "   ✅ Systemd service updated"
+                echo "   Reloading systemd daemon..."
+                sudo systemctl daemon-reload
+                echo "   ✅ Systemd daemon reloaded"
+              else
+                echo "   ⚠️ telegram-bot.service file not found in bot directory"
+                echo "   Creating systemd service manually..."
+                sudo tee /etc/systemd/system/telegram-bot.service > /dev/null <<EOF
+[Unit]
+Description=Telegram Bot for Task Management System
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/tipa.taska.uz/telegram-bot
+Environment="PATH=/var/www/tipa.taska.uz/telegram-bot/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/var/www/tipa.taska.uz/telegram-bot/.env
+ExecStart=/var/www/tipa.taska.uz/telegram-bot/venv/bin/python /var/www/tipa.taska.uz/telegram-bot/bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+                sudo chmod 644 /etc/systemd/system/telegram-bot.service
+                sudo systemctl daemon-reload
+                echo "   ✅ Systemd service created and reloaded"
+              fi
+              
               # Убеждаемся, что firebase-credentials.json доступен (если есть)
               if [ -f "firebase-credentials.json" ]; then
                 sudo chown $USER:$USER firebase-credentials.json || true
@@ -114,13 +152,25 @@ jobs:
               # Запускаем с sudo для systemd операций, но передаем пользователя деплоя
               DEPLOY_USER=$USER sudo -E ./deploy.sh || echo "⚠️ Telegram bot deployment failed, but continuing..."
               
+              # Перезапускаем сервис после обновления .env и systemd
+              echo "🔄 Restarting telegram-bot service..."
+              sudo systemctl restart telegram-bot.service || echo "⚠️ Failed to restart service"
+              sleep 5
+              
               # Проверяем, что бот запустился
-              sleep 3
               if systemctl is-active --quiet telegram-bot; then
                 echo "✅ Telegram bot is running"
                 # Проверяем логи на наличие версии
                 echo "📋 Checking bot logs for version..."
                 sudo journalctl -u telegram-bot -n 5 --no-pager | grep -i "code version" || echo "⚠️ Version not found in logs (may need to check manually)"
+                # Проверяем, что нет ошибок 409
+                echo "📋 Checking for 409 Conflict errors..."
+                if sudo journalctl -u telegram-bot -n 20 --no-pager | grep -qi "409\|conflict"; then
+                  echo "   ⚠️ Found 409/Conflict errors in logs!"
+                  sudo journalctl -u telegram-bot -n 20 --no-pager | grep -i "409\|conflict" | tail -3
+                else
+                  echo "   ✅ No 409/Conflict errors found"
+                fi
               else
                 echo "❌ Telegram bot is NOT running!"
                 echo "📋 Recent logs:"

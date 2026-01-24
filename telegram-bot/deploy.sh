@@ -191,7 +191,9 @@ After=network.target
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$BOT_DIR
-Environment="PATH=$VENV_DIR/bin"
+Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
+# ВАЖНО: Загружаем переменные окружения из .env файла
+EnvironmentFile=$BOT_DIR/.env
 ExecStart=$VENV_DIR/bin/python $BOT_DIR/bot.py
 Restart=always
 RestartSec=10
