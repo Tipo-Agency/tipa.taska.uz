@@ -61,7 +61,6 @@ def get_settings_menu() -> InlineKeyboardMarkup:
     """Меню настроек"""
     keyboard = [
         [InlineKeyboardButton("🔔 Уведомления", callback_data="settings_notifications")],
-        [InlineKeyboardButton("📄 Подписки на документы", callback_data="settings_documents")],
         [InlineKeyboardButton("🔙 Назад", callback_data="menu_main")]
     ]
     return InlineKeyboardMarkup(keyboard)

@@ -87,6 +87,8 @@ print(f"[BOT] Bot file path: {BOT_FILE_PATH}", flush=True)
 (LOGIN, PASSWORD) = range(2)
 # Состояния для создания задачи из сообщения в группе
 (TASK_FROM_MESSAGE_TITLE, TASK_FROM_MESSAGE_DATE, TASK_FROM_MESSAGE_ASSIGNEE) = range(2, 5)
+# Состояние для ввода ID группового чата
+(SETTING_GROUP_CHAT_ID,) = range(5, 6)
 
 # Хранилище сессий пользователей (в продакшене использовать Redis)
 user_sessions = {}  # {telegram_user_id: {user_id: str, last_check: datetime}}
@@ -290,7 +292,10 @@ async def tasks_overdue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_user_id = update.effective_user.id
     user_id = user_sessions[telegram_user_id]['user_id']
     
+    logger.info(f"[TASKS_OVERDUE] Getting overdue tasks for user_id: {user_id}")
     tasks = get_overdue_tasks(user_id)
+    logger.info(f"[TASKS_OVERDUE] Found {len(tasks)} overdue tasks")
+    
     users = firebase.get_all('users')
     projects = firebase.get_all('projects')
     
@@ -328,13 +333,22 @@ async def tasks_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_user_id = update.effective_user.id
     user_id = user_sessions[telegram_user_id]['user_id']
     
-    tasks = get_user_tasks(user_id)
+    all_user_tasks = get_user_tasks(user_id)
+    
+    # Фильтруем выполненные задачи
+    tasks = []
+    for task in all_user_tasks:
+        status = task.get('status', '').lower()
+        # Исключаем выполненные задачи
+        if status not in ['выполнено', 'done', 'завершено', 'completed']:
+            tasks.append(task)
+    
     users = firebase.get_all('users')
     projects = firebase.get_all('projects')
     
     if not tasks:
         await query.edit_message_text(
-            "✅ У вас нет задач!",
+            "✅ У вас нет активных задач!",
             reply_markup=get_tasks_menu()
         )
         return
@@ -651,13 +665,70 @@ async def deal_create_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user_states[telegram_user_id] = {'state': 'creating_deal', 'data': {}}
     
     user_states[telegram_user_id]['data']['funnelId'] = funnel_id
+    
+    # Получаем этапы воронки
+    stages = get_funnel_stages(funnel_id)
+    funnel = firebase.get_by_id('salesFunnels', funnel_id)
+    funnel_name = funnel.get('name', '') if funnel else ''
+    
+    if stages and len(stages) > 0:
+        # Если есть этапы, показываем их для выбора
+        user_states[telegram_user_id]['state'] = 'creating_deal_stage'
+        
+        keyboard = []
+        for stage in stages:
+            keyboard.append([
+                InlineKeyboardButton(
+                    stage.get('name', stage.get('id', '')),
+                    callback_data=f"deal_create_stage_{funnel_id}_{stage.get('id', '')}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="deal_create")])
+        
+        await query.edit_message_text(
+            f"➕ Создание новой заявки\n\nВоронка: {funnel_name}\n\nВыберите этап:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        # Если этапов нет, сразу переходим к вводу названия
+        user_states[telegram_user_id]['state'] = 'creating_deal_title'
+        await query.edit_message_text(
+            f"➕ Создание новой заявки\n\nВоронка: {funnel_name}\n\nВведите название заявки:",
+            reply_markup=get_back_button("menu_deals")
+        )
+
+@require_auth
+async def deal_create_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор этапа воронки при создании сделки"""
+    query = update.callback_query
+    await query.answer()
+    
+    parts = query.data.split('_')
+    funnel_id = parts[3] if len(parts) > 3 else None
+    stage_id = parts[4] if len(parts) > 4 else None
+    
+    if not funnel_id or not stage_id:
+        await query.answer("❌ Этап не указан")
+        return
+    
+    telegram_user_id = update.effective_user.id
+    if telegram_user_id not in user_states:
+        user_states[telegram_user_id] = {'state': 'creating_deal', 'data': {}}
+    
+    # Сохраняем выбранный этап
+    user_states[telegram_user_id]['data']['stage'] = stage_id
     user_states[telegram_user_id]['state'] = 'creating_deal_title'
+    
+    # Получаем название этапа
+    stages = get_funnel_stages(funnel_id)
+    stage = next((s for s in stages if s.get('id') == stage_id), None)
+    stage_name = stage.get('name', '') if stage else ''
     
     funnel = firebase.get_by_id('salesFunnels', funnel_id)
     funnel_name = funnel.get('name', '') if funnel else ''
     
     await query.edit_message_text(
-        f"➕ Создание новой заявки\n\nВоронка: {funnel_name}\n\nВведите название заявки:",
+        f"➕ Создание новой заявки\n\nВоронка: {funnel_name}\nЭтап: {stage_name}\n\nВведите название заявки:",
         reply_markup=get_back_button("menu_deals")
     )
 
@@ -785,6 +856,37 @@ async def deal_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("❌ Ошибка при удалении сделки")
 
 @require_auth
+async def group_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /group_id - показать ID группового чата"""
+    try:
+        if not update.message:
+            return
+        
+        chat_id = update.message.chat.id
+        chat_type = update.message.chat.type
+        
+        # Команда работает только в группах
+        if chat_type not in ['group', 'supergroup']:
+            await update.message.reply_text(
+                "❌ Эта команда работает только в групповых чатах.\n"
+                "Добавьте бота в группу и используйте команду там."
+            )
+            return
+        
+        await update.message.reply_text(
+            f"💬 ID этого группового чата:\n\n`{chat_id}`\n\n"
+            "Скопируйте этот ID и используйте его в настройках уведомлений бота.",
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in group_id_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ Произошла ошибка.")
+        except:
+            pass
+
+@require_auth
 async def menu_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню профиля"""
     query = update.callback_query
@@ -809,7 +911,7 @@ async def menu_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @require_auth
 async def settings_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Настройки уведомлений"""
+    """Настройки уведомлений - главное меню"""
     query = update.callback_query
     await query.answer()
     
@@ -817,24 +919,41 @@ async def settings_notifications(update: Update, context: ContextTypes.DEFAULT_T
     notification_prefs = firebase.get_by_id('notificationPrefs', 'default')
     
     if not notification_prefs:
+        # Создаем дефолтные настройки (все включены по умолчанию)
         notification_prefs = {
-            'telegramPersonal': True,
-            'telegramGroup': False,
-            'telegramGroupChatId': None
+            'id': 'default',
+            'newTask': {'telegramPersonal': True, 'telegramGroup': False},
+            'statusChange': {'telegramPersonal': True, 'telegramGroup': False},
+            'taskAssigned': {'telegramPersonal': True, 'telegramGroup': False},
+            'taskComment': {'telegramPersonal': True, 'telegramGroup': False},
+            'taskDeadline': {'telegramPersonal': True, 'telegramGroup': False},
+            'docCreated': {'telegramPersonal': True, 'telegramGroup': False},
+            'docUpdated': {'telegramPersonal': True, 'telegramGroup': False},
+            'docShared': {'telegramPersonal': True, 'telegramGroup': False},
+            'meetingCreated': {'telegramPersonal': True, 'telegramGroup': False},
+            'meetingReminder': {'telegramPersonal': True, 'telegramGroup': False},
+            'meetingUpdated': {'telegramPersonal': True, 'telegramGroup': False},
+            'dealCreated': {'telegramPersonal': True, 'telegramGroup': False},
+            'dealStatusChanged': {'telegramPersonal': True, 'telegramGroup': False},
+            'clientCreated': {'telegramPersonal': True, 'telegramGroup': False},
+            'contractCreated': {'telegramPersonal': True, 'telegramGroup': False},
+            'purchaseRequestCreated': {'telegramPersonal': True, 'telegramGroup': False},
+            'purchaseRequestStatusChanged': {'telegramPersonal': True, 'telegramGroup': False},
+            'financePlanUpdated': {'telegramPersonal': True, 'telegramGroup': False},
         }
+        firebase.save('notificationPrefs', notification_prefs)
     
-    message = (
-        "🔔 Настройки уведомлений\n\n"
-        f"📱 Личные уведомления: {'✅ Включены' if notification_prefs.get('telegramPersonal') else '❌ Выключены'}\n"
-        f"👥 Групповые уведомления: {'✅ Включены' if notification_prefs.get('telegramGroup') else '❌ Выключены'}\n"
-    )
+    message = "🔔 Настройки уведомлений\n\nВыберите категорию для настройки:"
     
-    if notification_prefs.get('telegramGroupChatId'):
-        message += f"💬 ID группового чата: {notification_prefs.get('telegramGroupChatId')}\n"
-    
-    message += "\n⚠️ Для изменения настроек используйте веб-версию приложения."
-    
-    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_settings")]]
+    keyboard = [
+        [InlineKeyboardButton("📋 Задачи", callback_data="settings_notif_tasks")],
+        [InlineKeyboardButton("📄 Документы", callback_data="settings_notif_docs")],
+        [InlineKeyboardButton("📅 Встречи", callback_data="settings_notif_meetings")],
+        [InlineKeyboardButton("🎯 CRM (Сделки, Клиенты)", callback_data="settings_notif_crm")],
+        [InlineKeyboardButton("💰 Финансы", callback_data="settings_notif_finance")],
+        [InlineKeyboardButton("👥 Групповой чат", callback_data="settings_notif_group")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="menu_settings")]
+    ]
     
     await query.edit_message_text(
         message,
@@ -1578,6 +1697,7 @@ def main():
     application.add_handler(auth_handler)  # ConversationHandler для /start
     application.add_handler(CommandHandler('logout', logout))
     application.add_handler(CommandHandler('help', help_command))
+    application.add_handler(CommandHandler('group_id', group_id_command))
     
     # Команды для работы в группах (показывают сущности)
     application.add_handler(CommandHandler('task', show_task_in_group))
@@ -1613,12 +1733,32 @@ def main():
     application.add_handler(CallbackQueryHandler(deals_mine, pattern='^deals_mine$'))
     application.add_handler(CallbackQueryHandler(deal_create, pattern='^deal_create$'))
     application.add_handler(CallbackQueryHandler(deal_create_funnel, pattern='^deal_create_funnel_'))
+    application.add_handler(CallbackQueryHandler(deal_create_stage, pattern='^deal_create_stage_'))
     application.add_handler(CallbackQueryHandler(deal_detail, pattern='^deal_[^_]+$'))
     application.add_handler(CallbackQueryHandler(deal_set_stage, pattern='^deal_set_stage_'))
     application.add_handler(CallbackQueryHandler(deal_delete, pattern='^deal_delete_'))
     application.add_handler(CallbackQueryHandler(menu_profile, pattern='^menu_profile$'))
     application.add_handler(CallbackQueryHandler(menu_settings, pattern='^menu_settings$'))
     application.add_handler(CallbackQueryHandler(settings_notifications, pattern='^settings_notifications$'))
+    application.add_handler(CallbackQueryHandler(settings_notif_tasks, pattern='^settings_notif_tasks$'))
+    application.add_handler(CallbackQueryHandler(settings_notif_docs, pattern='^settings_notif_docs$'))
+    application.add_handler(CallbackQueryHandler(settings_notif_meetings, pattern='^settings_notif_meetings$'))
+    application.add_handler(CallbackQueryHandler(settings_notif_crm, pattern='^settings_notif_crm$'))
+    application.add_handler(CallbackQueryHandler(settings_notif_finance, pattern='^settings_notif_finance$'))
+    application.add_handler(CallbackQueryHandler(settings_notif_group, pattern='^settings_notif_group$'))
+    application.add_handler(CallbackQueryHandler(settings_toggle_notification, pattern='^settings_toggle_'))
+    
+    # ConversationHandler для ввода ID группового чата
+    group_chat_id_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(settings_group_set_chat_id_start, pattern='^settings_group_set_chat_id$')],
+        states={
+            SETTING_GROUP_CHAT_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, settings_group_set_chat_id_input)],
+        },
+        fallbacks=[CommandHandler('cancel', lambda u, c: ConversationHandler.END)],
+        name="group_chat_id",
+        persistent=False,
+    )
+    application.add_handler(group_chat_id_handler)
     application.add_handler(CallbackQueryHandler(menu_help, pattern='^menu_help$'))
     
     # Периодическая проверка (каждые 30 секунд)

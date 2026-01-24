@@ -13,46 +13,70 @@ def get_user_tasks(user_id: str, include_archived: bool = False) -> List[Dict[st
         user_tasks = []
         
         for task in all_tasks:
+            # Пропускаем архивные задачи
             if task.get('isArchived') and not include_archived:
                 continue
             
             # Проверяем, назначена ли задача на пользователя
-            if task.get('assigneeId') == user_id or user_id in task.get('assigneeIds', []):
+            assignee_id = task.get('assigneeId')
+            assignee_ids = task.get('assigneeIds', [])
+            
+            # Проверяем по assigneeId (может быть строкой или None)
+            if assignee_id and str(assignee_id) == str(user_id):
+                user_tasks.append(task)
+            # Проверяем по assigneeIds (массив)
+            elif isinstance(assignee_ids, list) and user_id in [str(uid) for uid in assignee_ids if uid]:
                 user_tasks.append(task)
         
         return user_tasks
     except Exception as e:
         print(f"Error getting user tasks: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def get_today_tasks(user_id: str) -> List[Dict[str, Any]]:
     """Получить задачи на сегодня"""
-    today = get_today_date()
-    user_tasks = get_user_tasks(user_id)
-    
-    today_tasks = []
-    for task in user_tasks:
-        if task.get('endDate') == today:
-            # Исключаем выполненные задачи
-            status = task.get('status', '')
-            if status not in ['Выполнено', 'Done', 'Завершено']:
-                today_tasks.append(task)
-    
-    return today_tasks
+    try:
+        today = get_today_date()
+        user_tasks = get_user_tasks(user_id)
+        
+        today_tasks = []
+        for task in user_tasks:
+            end_date = task.get('endDate', '')
+            if end_date == today:
+                # Исключаем выполненные задачи
+                status = task.get('status', '').lower()
+                if status not in ['выполнено', 'done', 'завершено', 'completed']:
+                    today_tasks.append(task)
+        
+        return today_tasks
+    except Exception as e:
+        print(f"Error getting today tasks: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 def get_overdue_tasks(user_id: str) -> List[Dict[str, Any]]:
     """Получить просроченные задачи"""
-    user_tasks = get_user_tasks(user_id)
-    
-    overdue_tasks = []
-    for task in user_tasks:
-        if is_overdue(task.get('endDate', '')):
-            # Исключаем выполненные задачи
-            status = task.get('status', '')
-            if status not in ['Выполнено', 'Done', 'Завершено']:
-                overdue_tasks.append(task)
-    
-    return overdue_tasks
+    try:
+        user_tasks = get_user_tasks(user_id)
+        
+        overdue_tasks = []
+        for task in user_tasks:
+            end_date = task.get('endDate', '')
+            if end_date and is_overdue(end_date):
+                # Исключаем выполненные задачи
+                status = task.get('status', '').lower()
+                if status not in ['выполнено', 'done', 'завершено', 'completed']:
+                    overdue_tasks.append(task)
+        
+        return overdue_tasks
+    except Exception as e:
+        print(f"Error getting overdue tasks: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 def get_yesterday_tasks() -> List[Dict[str, Any]]:
     """Получить задачи на вчера (не выполненные)"""
