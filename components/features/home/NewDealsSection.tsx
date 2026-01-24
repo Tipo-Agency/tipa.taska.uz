@@ -6,7 +6,6 @@ import { Deal, User, Client } from '../../../types';
 import { Card } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { ArrowRight, Briefcase } from 'lucide-react';
-import { Card } from '../../ui/Card';
 
 interface NewDealsSectionProps {
   deals: Deal[];
@@ -48,6 +47,7 @@ export const NewDealsSection: React.FC<NewDealsSectionProps> = ({
       <div className="space-y-2">
         {newDeals.map((deal) => {
           const client = clients.find(c => c.id === deal.clientId);
+          const assignee = users.find(u => u.id === deal.assigneeId);
           return (
             <Card
               key={deal.id}
@@ -57,10 +57,18 @@ export const NewDealsSection: React.FC<NewDealsSectionProps> = ({
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 dark:text-white text-sm mb-1 truncate">
-                    {client?.name || 'Без клиента'}
+                    {deal.title || deal.contactName || client?.name || 'Новая заявка'}
                   </h3>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {deal.amount > 0 && `${deal.amount.toLocaleString()} ${deal.currency || 'UZS'}`}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    {deal.amount > 0 && (
+                      <span>{deal.amount.toLocaleString()} {deal.currency || 'UZS'}</span>
+                    )}
+                    {client && (
+                      <span className="truncate max-w-[120px]">• {client.name}</span>
+                    )}
+                    {assignee && (
+                      <span className="truncate max-w-[100px]">• {assignee.name}</span>
+                    )}
                   </div>
                 </div>
               </div>

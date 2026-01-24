@@ -161,9 +161,9 @@ export const HomePage: React.FC<HomePageProps> = ({
             />
 
             {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
               {/* Left Column - Tasks */}
-              <div className="lg:col-span-1">
+              <div className="lg:col-span-1 flex flex-col">
                 <MyTasksSection
                   tasks={myTasks}
                   users={users}
@@ -176,7 +176,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
 
               {/* Middle Column - New Deals and Meetings */}
-              <div className="lg:col-span-1 space-y-4">
+              <div className="lg:col-span-1 flex flex-col space-y-4">
                 <NewDealsSection
                   deals={deals}
                   clients={clients}
@@ -192,7 +192,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
 
               {/* Right Column - Recent Activity */}
-              <div className="lg:col-span-1">
+              <div className="lg:col-span-1 flex flex-col">
                 <RecentActivity
                   activities={recentActivity}
                   users={users}

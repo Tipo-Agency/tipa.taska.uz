@@ -13,6 +13,7 @@ import HomeView from './HomeView';
 import { HomePage } from './pages/HomePage';
 import { TasksPage } from './pages/TasksPage';
 import { ClientsPage } from './pages/ClientsPage';
+import { InboxPage } from './pages/InboxPage';
 import InboxView from './InboxView';
 import SettingsView from './SettingsView';
 import AnalyticsView from './AnalyticsView';
