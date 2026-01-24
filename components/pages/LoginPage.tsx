@@ -13,7 +13,7 @@ import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { LogIn, Lock, User as UserIcon } from 'lucide-react';
-import { comparePassword, isHashedPassword } from '../utils/passwordHash';
+import { comparePassword, isHashedPassword } from '../../utils/passwordHash';
 
 interface LoginPageProps {
   users: User[];
