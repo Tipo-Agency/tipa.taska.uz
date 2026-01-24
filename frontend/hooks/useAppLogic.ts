@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../../backend/api';
 import { FAVICON_SVG_DATA_URI } from '../../components/AppIcons';
 import { storageService } from '../../services/storageService';
-import { pollTelegramUpdates } from '../../services/telegramService';
+// import { pollTelegramUpdates } from '../../services/telegramService'; // Отключено - polling делается только на сервере
 import { 
   notifyDealCreated, 
   notifyDealStatusChanged, 
@@ -255,37 +255,48 @@ export const useAppLogic = () => {
   // Данные загружаются по требованию и обновляются после каждого сохранения
 
   // Telegram polling для CRM модуля
-  // ВАЖНО: Отключено, чтобы избежать конфликта с ботом (getUpdates может использоваться только одним клиентом)
-  // Если нужен polling для клиентского бота - используйте отдельный токен или webhook
+  // ⚠️ ВАЖНО: ПОЛНОСТЬЮ ОТКЛЮЧЕНО для избежания конфликта 409
+  // 
+  // ПРОБЛЕМА: getUpdates может использоваться только одним клиентом для одного токена
+  // Бот на сервере уже использует polling (application.run_polling) с токеном из .env (GitHub Secrets)
+  // Поэтому фронтенд НЕ должен делать getUpdates - это вызовет конфликт 409
+  //
+  // РЕШЕНИЕ: Для получения лидов из Telegram используйте:
+  // 1. Отдельный бот с другим токеном (клиентский бот) - тогда polling будет работать
+  // 2. Или webhook вместо polling
+  // 3. Или получайте лиды через бота на сервере (бот может отправлять данные в систему)
+  //
+  // ОТПРАВКА СООБЩЕНИЙ (sendMessage) работает нормально - не требует getUpdates
+  // Можно отправлять и в группу, и лично - это не вызывает конфликт!
   useEffect(() => {
     if (!loadedModulesRef.current.has('crm')) return; // Работает только если CRM модуль загружен
     
-    // Проверяем, что используется другой токен (клиентский бот), а не employee бот
-    const clientBotToken = storageService.getClientBotToken();
-    const employeeBotToken = storageService.getEmployeeBotToken();
+    // ПОЛНОСТЬЮ ОТКЛЮЧАЕМ polling из фронтенда
+    // Бот на сервере уже использует polling с токеном из .env (GitHub Secrets)
+    // Фронтенд НЕ должен делать getUpdates с тем же токеном
+    console.warn('[TELEGRAM] ⚠️ Polling ПОЛНОСТЬЮ отключен на фронтенде');
+    console.warn('[TELEGRAM] Бот на сервере использует polling с токеном из GitHub Secrets');
+    console.warn('[TELEGRAM] Для получения лидов создайте отдельного клиентского бота с другим токеном');
     
-    // Если токены совпадают или клиентский токен не установлен - отключаем polling
-    if (!clientBotToken || clientBotToken === employeeBotToken) {
-      console.warn('[TELEGRAM] Polling отключен: используется тот же токен, что и для employee бота');
+    // Polling полностью отключен - не создаем interval
+    // Если в будущем понадобится polling для клиентского бота - раскомментируйте код ниже
+    /*
+    const clientBotToken = storageService.getClientBotToken()?.trim() || '';
+    if (!clientBotToken) {
       return;
     }
     
     const tgPollInterval = setInterval(async () => {
-        // Only run polling if enabled in settings
         if (!storageService.getEnableTelegramImport()) return;
-        
         const updates = await pollTelegramUpdates();
         if (updates.newDeals.length > 0 || updates.newMessages.length > 0) {
-            // Merge new deals
             if (updates.newDeals.length > 0) {
-                const currentDeals = await api.deals.getAll(); // get fresh
+                const currentDeals = await api.deals.getAll();
                 const mergedDeals = [...currentDeals, ...updates.newDeals];
                 crmSlice.setters.setDeals(mergedDeals);
                 await api.deals.updateAll(mergedDeals);
                 showNotification(`Новых лидов из Telegram: ${updates.newDeals.length}`);
             }
-            
-            // Merge messages
             if (updates.newMessages.length > 0) {
                 const currentDeals = await api.deals.getAll();
                 const updatedDeals = currentDeals.map(d => {
@@ -308,8 +319,8 @@ export const useAppLogic = () => {
             }
         }
     }, 10000);
-
     return () => clearInterval(tgPollInterval);
+    */
   }, [loadedModules]);
 
   // Instagram синхронизация для воронок с подключенным Instagram

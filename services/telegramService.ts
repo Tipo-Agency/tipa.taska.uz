@@ -12,6 +12,8 @@ import { api } from "../backend/api";
  * @param targetChatId - ID чата для отправки (личный чат пользователя или группа)
  */
 const sendTelegramMessage = async (message: string, targetChatId: string, buttons?: TelegramButtonConfig[]): Promise<boolean> => {
+  // Токен берется из localStorage (устанавливается в настройках)
+  // На сервере токен берется из .env (через GitHub Secrets)
   const botToken = storageService.getEmployeeBotToken();
   
   if (!targetChatId || !botToken) {
@@ -19,6 +21,7 @@ const sendTelegramMessage = async (message: string, targetChatId: string, button
       hasToken: !!botToken, 
       hasChatId: !!targetChatId 
     });
+    console.warn('[TELEGRAM] Установите токен бота в настройках системы');
     return false;
   }
 
@@ -139,10 +142,16 @@ export const pollTelegramUpdates = async (): Promise<{ newDeals: Deal[], newMess
     const botToken = storageService.getClientBotToken();
     const employeeBotToken = storageService.getEmployeeBotToken();
     
-    // Проверка: если токены совпадают - не делаем polling (вызовет конфликт 409)
-    if (!botToken || botToken === employeeBotToken) {
-        console.warn('[TELEGRAM POLLING] Отключено: клиентский токен не установлен или совпадает с employee токеном');
-        return result;
+    // СТРОГАЯ ПРОВЕРКА: если токены совпадают, клиентский токен не установлен,
+    // или employee токен установлен - НЕ делаем polling (вызовет конфликт 409)
+    if (!botToken || 
+        !botToken.trim() || 
+        botToken === employeeBotToken || 
+        (employeeBotToken && employeeBotToken.trim() && !botToken)) {
+        console.warn('[TELEGRAM POLLING] ❌ ОТКЛЮЧЕНО: клиентский токен не установлен или совпадает с employee токеном');
+        console.warn('[TELEGRAM POLLING] Employee бот на сервере уже использует getUpdates для этого токена');
+        console.warn('[TELEGRAM POLLING] Для получения лидов создайте отдельного клиентского бота с другим токеном');
+        return result; // Возвращаем пустой результат БЕЗ вызова API
     }
 
     try {

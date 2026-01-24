@@ -1,6 +1,6 @@
 
 import { Doc, Project, Role, TableCollection, Task, User, Meeting, ActivityLog, StatusOption, PriorityOption, ContentPost, Client, EmployeeInfo, Contract, Folder, Deal, NotificationPreferences, Department, FinanceCategory, FinancePlan, PurchaseRequest, OrgPosition, BusinessProcess, AutomationRule, Warehouse, InventoryItem, StockMovement, OneTimeDeal, AccountsReceivable, SalesFunnel } from "../types";
-import { FIREBASE_DB_URL, MOCK_PROJECTS, MOCK_TABLES, DEFAULT_STATUSES, DEFAULT_PRIORITIES, DEFAULT_NOTIFICATION_PREFS, MOCK_DEPARTMENTS, DEFAULT_FINANCE_CATEGORIES, MOCK_ORG_POSITIONS, DEFAULT_AUTOMATION_RULES, TELEGRAM_BOT_TOKEN } from "../constants";
+import { FIREBASE_DB_URL, MOCK_PROJECTS, MOCK_TABLES, DEFAULT_STATUSES, DEFAULT_PRIORITIES, DEFAULT_NOTIFICATION_PREFS, MOCK_DEPARTMENTS, DEFAULT_FINANCE_CATEGORIES, MOCK_ORG_POSITIONS, DEFAULT_AUTOMATION_RULES } from "../constants";
 import { firestoreService } from "./firestoreService";
 
 
@@ -96,7 +96,14 @@ export const storageService = {
   setTelegramChatId: (id: string) => localStorage.setItem(STORAGE_KEYS.TELEGRAM_CHAT_ID, id),
 
   // Bot Tokens
-  getEmployeeBotToken: (): string => localStorage.getItem(STORAGE_KEYS.TELEGRAM_EMPLOYEE_TOKEN) || TELEGRAM_BOT_TOKEN,
+  // ВАЖНО: Токен бота теперь берется только из .env на сервере (через GitHub Secrets)
+  // В браузере токен НЕ используется для polling (только для отправки сообщений)
+  // Polling делается только ботом на сервере
+  getEmployeeBotToken: (): string => {
+    // Токен для отправки уведомлений (берется из localStorage если установлен, иначе пустая строка)
+    // НЕ используем TELEGRAM_BOT_TOKEN из constants - это только для сервера
+    return localStorage.getItem(STORAGE_KEYS.TELEGRAM_EMPLOYEE_TOKEN) || '';
+  },
   setEmployeeBotToken: (t: string) => localStorage.setItem(STORAGE_KEYS.TELEGRAM_EMPLOYEE_TOKEN, t),
   
   getClientBotToken: (): string => localStorage.getItem(STORAGE_KEYS.TELEGRAM_CLIENT_TOKEN) || '',
