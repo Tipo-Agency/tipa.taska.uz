@@ -5,7 +5,20 @@ echo "🔍 ПОИСК ВСЕХ ПРОЦЕССОВ БОТА"
 echo "=================================================="
 echo ""
 
-BOT_TOKEN="8348357222:AAHzzrWFOE7n3MiGYKgugqXbUSehTW1-D1c"
+# Получаем токен из .env файла или переменной окружения
+BOT_DIR="/var/www/tipa.taska.uz/telegram-bot"
+if [ -f "$BOT_DIR/.env" ]; then
+    BOT_TOKEN=$(grep "TELEGRAM_BOT_TOKEN" "$BOT_DIR/.env" | cut -d'=' -f2 | tr -d ' ' | tr -d '"' | head -1 || echo "")
+fi
+
+if [ -z "$BOT_TOKEN" ]; then
+    BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
+fi
+
+if [ -z "$BOT_TOKEN" ]; then
+    echo "❌ Error: TELEGRAM_BOT_TOKEN not found"
+    exit 1
+fi
 
 # 1. Процессы с bot.py
 echo "1️⃣ Процессы с 'bot.py' в команде:"

@@ -5,7 +5,23 @@ set -e
 
 BOT_DIR="/var/www/tipa.taska.uz/telegram-bot"
 SERVICE_NAME="telegram-bot"
-BOT_TOKEN="8348357222:AAHzzrWFOE7n3MiGYKgugqXbUSehTW1-D1c"
+
+# Получаем токен из .env файла
+if [ -f "$BOT_DIR/.env" ]; then
+    BOT_TOKEN=$(grep "TELEGRAM_BOT_TOKEN" "$BOT_DIR/.env" | cut -d'=' -f2 | tr -d ' ' | tr -d '"' | head -1 || echo "")
+fi
+
+# Если токен не найден в .env, пробуем из переменной окружения
+if [ -z "$BOT_TOKEN" ]; then
+    BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
+fi
+
+# Если токен все еще не найден - ошибка
+if [ -z "$BOT_TOKEN" ]; then
+    echo "❌ Error: TELEGRAM_BOT_TOKEN not found in .env file or environment variable"
+    echo "   Please set TELEGRAM_BOT_TOKEN in $BOT_DIR/.env"
+    exit 1
+fi
 
 echo "🔧 ПРИНУДИТЕЛЬНОЕ ИСПРАВЛЕНИЕ ПРОБЛЕМЫ CONFLICT"
 echo "=================================================="

@@ -5,7 +5,23 @@ set -e
 
 BOT_DIR="/var/www/tipa.taska.uz/telegram-bot"
 SERVICE_NAME="telegram-bot"
-BOT_TOKEN="8348357222:AAHzzrWFOE7n3MiGYKgugqXbUSehTW1-D1c"
+
+# Получаем токен из .env файла
+if [ -f "$BOT_DIR/.env" ]; then
+    BOT_TOKEN=$(grep "TELEGRAM_BOT_TOKEN" "$BOT_DIR/.env" | cut -d'=' -f2 | tr -d ' ' | tr -d '"' | head -1 || echo "")
+fi
+
+# Если токен не найден в .env, пробуем из переменной окружения
+if [ -z "$BOT_TOKEN" ]; then
+    BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
+fi
+
+# Если токен все еще не найден - ошибка
+if [ -z "$BOT_TOKEN" ]; then
+    echo "❌ Error: TELEGRAM_BOT_TOKEN not found in .env file or environment variable"
+    echo "   Please set TELEGRAM_BOT_TOKEN in $BOT_DIR/.env"
+    exit 1
+fi
 
 echo "🔍 ДИАГНОСТИКА И ИСПРАВЛЕНИЕ ПРОБЛЕМ С TELEGRAM БОТОМ"
 echo "=================================================="
@@ -193,16 +209,23 @@ fix_issues() {
     echo ""
     echo "3️⃣ Проверка .env файла..."
     if [ -f "$BOT_DIR/.env" ]; then
-        if grep -q "TELEGRAM_BOT_TOKEN=$BOT_TOKEN" "$BOT_DIR/.env"; then
-            echo "   ✅ Токен бота найден в .env"
+        ENV_TOKEN=$(grep "^TELEGRAM_BOT_TOKEN=" "$BOT_DIR/.env" | cut -d'=' -f2 | tr -d ' ' | tr -d '"' | head -1 || echo "")
+        if [ -n "$ENV_TOKEN" ]; then
+            if [ "$ENV_TOKEN" = "$BOT_TOKEN" ]; then
+                echo "   ✅ Токен бота найден в .env и совпадает"
+            else
+                echo "   ⚠️ Токен в .env отличается от используемого"
+                echo "   Токен в .env: ${ENV_TOKEN:0:20}..."
+                echo "   Используемый токен: ${BOT_TOKEN:0:20}..."
+            fi
         else
-            echo "   ⚠️ Токен бота не найден или неверный"
+            echo "   ❌ Токен бота не найден в .env"
             echo "   Проверьте файл: $BOT_DIR/.env"
         fi
     else
         echo "   ❌ Файл .env не найден!"
         echo "   Создайте файл $BOT_DIR/.env с содержимым:"
-        echo "   TELEGRAM_BOT_TOKEN=$BOT_TOKEN"
+        echo "   TELEGRAM_BOT_TOKEN=<your_token>"
     fi
     
     # 4. Проверка прав доступа

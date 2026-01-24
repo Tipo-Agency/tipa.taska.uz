@@ -53,7 +53,15 @@ if [ ! -f "$BOT_DIR/.env" ]; then
         echo "⚠️ Please update .env file with your configuration!"
     else
         echo "❌ .env.example not found. Please create .env manually."
+        exit 1
     fi
+fi
+
+# Проверяем, что токен установлен в .env
+if ! grep -q "TELEGRAM_BOT_TOKEN=" "$BOT_DIR/.env" || grep -q "TELEGRAM_BOT_TOKEN=$" "$BOT_DIR/.env" || grep -q "^TELEGRAM_BOT_TOKEN=\s*$" "$BOT_DIR/.env"; then
+    echo "❌ Error: TELEGRAM_BOT_TOKEN not set in .env file!"
+    echo "   Please set TELEGRAM_BOT_TOKEN in .env file or pass it via environment variable."
+    exit 1
 fi
 
 # Останавливаем все экземпляры бота (важно для избежания ошибки 409 Conflict)

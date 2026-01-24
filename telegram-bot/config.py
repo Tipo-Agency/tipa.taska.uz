@@ -6,8 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Telegram Bot Token
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8348357222:AAHzzrWFOE7n3MiGYKgugqXbUSehTW1-D1c')
+# Telegram Bot Token (обязательно из переменных окружения, без дефолтного значения)
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required! Set it in .env file or environment.")
 
 # Firebase конфигурация
 FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID', 'tipa-task-manager')

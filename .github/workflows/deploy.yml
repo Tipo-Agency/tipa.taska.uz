@@ -73,11 +73,28 @@ jobs:
               sudo chown -R $USER:$USER "$(pwd)" || true
               sudo chmod -R u+rwX "$(pwd)" || true
               
-              # Убеждаемся, что .env файл доступен
-              if [ -f ".env" ]; then
-                sudo chown $USER:$USER .env || true
-                chmod 600 .env || true
+              # Создаем или обновляем .env файл с токеном из secrets
+              echo "🔐 Setting up .env file with token from GitHub Secrets..."
+              if [ ! -f ".env" ]; then
+                echo "   Creating .env file..."
+                touch .env
               fi
+              
+              # Обновляем токен в .env (добавляем или заменяем существующий)
+              if grep -q "^TELEGRAM_BOT_TOKEN=" .env; then
+                # Заменяем существующий токен
+                sed -i "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}|" .env
+                echo "   ✅ Updated TELEGRAM_BOT_TOKEN in .env"
+              else
+                # Добавляем новый токен
+                echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
+                echo "   ✅ Added TELEGRAM_BOT_TOKEN to .env"
+              fi
+              
+              # Убеждаемся, что .env файл доступен только владельцу
+              sudo chown $USER:$USER .env || true
+              chmod 600 .env || true
+              
               # Убеждаемся, что firebase-credentials.json доступен (если есть)
               if [ -f "firebase-credentials.json" ]; then
                 sudo chown $USER:$USER firebase-credentials.json || true
