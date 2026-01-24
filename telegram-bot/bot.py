@@ -59,6 +59,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ВАЖНО: Отключаем INFO логи для httpx, чтобы токен не попадал в логи
+# httpx логирует полные URL запросов вида https://api.telegram.org/bot<TOKEN>/...
+# Устанавливаем WARNING, чтобы видеть только ошибки, а не все запросы
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# Также настраиваем telegram логгеры
+# telegram.ext оставляем на INFO для отладки бота, но без URL с токенами
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext").setLevel(logging.INFO)
+
 # Логируем версию кода СРАЗУ после настройки логирования
 logger.info("=" * 60)
 logger.info(f"[BOT] ===== MODULE LOADED ===== Code version: {CODE_VERSION_AT_START} =====")
@@ -71,12 +81,6 @@ logger.info("=" * 60)
 # Также выводим в stdout/stderr для systemd
 print(f"[BOT] ===== MODULE LOADED ===== Code version: {CODE_VERSION_AT_START} =====", flush=True)
 print(f"[BOT] Bot file path: {BOT_FILE_PATH}", flush=True)
-
-# Включаем детальное логирование для httpx (чтобы видеть ответы от Telegram API)
-logging.getLogger("httpx").setLevel(logging.DEBUG)
-
-# Включаем логирование для httpx (чтобы видеть запросы к Telegram API)
-logging.getLogger("httpx").setLevel(logging.INFO)
 
 # Состояния для ConversationHandler
 (LOGIN, PASSWORD) = range(2)
@@ -610,7 +614,8 @@ def main():
         logger.info(f"[BOT] Code version: {CODE_VERSION}")
         logger.info(f"[BOT] This version includes detailed update logging")
         print(f"[BOT] ===== STARTING BOT ===== Code version: {CODE_VERSION} =====")
-        logger.info(f"[BOT] Initializing bot with token: {config.TELEGRAM_BOT_TOKEN[:10]}...")
+        # ВАЖНО: Не логируем токен из соображений безопасности
+        logger.info("[BOT] Initializing bot with token (hidden for security)...")
         
         # Создаем приложение
         application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
@@ -721,7 +726,8 @@ def main():
     logger.info("=" * 60)
     logger.info("Bot started")
     logger.info(f"[BOT] Code version: {CODE_VERSION} (with detailed logging)")
-    logger.info(f"[BOT] Starting polling with token: {config.TELEGRAM_BOT_TOKEN[:10]}...")
+    # ВАЖНО: Не логируем токен из соображений безопасности
+    logger.info("[BOT] Starting polling (token hidden for security)...")
     logger.info(f"[BOT] Polling mode: allowed_updates={Update.ALL_TYPES}, drop_pending_updates=False")
     logger.info(f"[BOT] All handlers registered, starting polling...")
     logger.info("=" * 60)
