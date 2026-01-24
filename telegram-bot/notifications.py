@@ -4,7 +4,7 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from firebase_client import firebase
-from tasks import get_today_tasks, get_overdue_tasks
+from tasks import get_today_tasks, get_overdue_tasks, get_yesterday_tasks, get_all_today_tasks, get_all_overdue_tasks
 from deals import get_won_deals_today
 from messages import format_daily_reminder, format_weekly_report, format_successful_deal
 from utils import get_week_range, format_date
@@ -202,6 +202,20 @@ def get_weekly_report_message() -> Optional[str]:
         return format_weekly_report(stats)
     except Exception as e:
         print(f"Error getting weekly report: {e}")
+        return None
+
+def get_group_daily_summary() -> Optional[str]:
+    """Получить ежедневную сводку для группы"""
+    try:
+        yesterday_tasks = get_yesterday_tasks()
+        overdue_tasks = get_all_overdue_tasks()
+        today_tasks = get_all_today_tasks()
+        users = firebase.get_all('users')
+        
+        from messages import format_group_daily_summary
+        return format_group_daily_summary(yesterday_tasks, overdue_tasks, today_tasks, users)
+    except Exception as e:
+        print(f"Error getting group daily summary: {e}")
         return None
 
 def get_successful_deal_message(deal: Dict[str, Any]) -> Optional[str]:

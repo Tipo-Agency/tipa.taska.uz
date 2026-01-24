@@ -55,10 +55,11 @@ const sendTelegramMessage = async (message: string, targetChatId: string, button
     
     if (!result.ok) {
       console.error('[TELEGRAM EMPLOYEE] Send failed:', result.description || result);
+      console.error('[TELEGRAM EMPLOYEE] Request details:', { chatId: targetChatId, hasToken: !!botToken });
       return false;
     }
     
-    console.log('[TELEGRAM EMPLOYEE] Notification sent successfully');
+    console.log('[TELEGRAM EMPLOYEE] Notification sent successfully to chat:', targetChatId);
     return true;
   } catch (error) {
     console.error('[TELEGRAM EMPLOYEE] Send failed', error);
@@ -87,18 +88,37 @@ export const sendTelegramNotification = async (
     return sendTelegramMessage(message, chatId, buttons);
   }
 
+  console.log('[TELEGRAM] sendTelegramNotification called:', {
+    hasSetting: !!notificationSetting,
+    telegramPersonal: notificationSetting.telegramPersonal,
+    telegramGroup: notificationSetting.telegramGroup,
+    hasUserChatId: !!userTelegramChatId,
+    hasGroupChatId: !!groupChatId
+  });
+
   let sent = false;
 
   // Отправляем в личный чат, если включено
   if (notificationSetting.telegramPersonal && userTelegramChatId) {
+    console.log('[TELEGRAM] Sending personal notification to:', userTelegramChatId);
     sent = await sendTelegramMessage(message, userTelegramChatId, buttons) || sent;
+  } else {
+    if (!notificationSetting.telegramPersonal) {
+      console.log('[TELEGRAM] Personal notifications disabled');
+    }
+    if (!userTelegramChatId) {
+      console.warn('[TELEGRAM] No userTelegramChatId provided');
+    }
   }
 
   // Отправляем в группу, если включено
   if (notificationSetting.telegramGroup) {
     const groupId = groupChatId || storageService.getTelegramChatId();
     if (groupId) {
+      console.log('[TELEGRAM] Sending group notification to:', groupId);
       sent = await sendTelegramMessage(message, groupId, buttons) || sent;
+    } else {
+      console.warn('[TELEGRAM] Group notifications enabled but no groupChatId');
     }
   }
 

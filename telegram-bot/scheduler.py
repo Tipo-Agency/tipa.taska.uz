@@ -13,7 +13,7 @@ from datetime import datetime
 import pytz
 import config
 from firebase_client import firebase
-from notifications import get_daily_reminder_message, get_weekly_report_message, get_successful_deal_message
+from notifications import get_daily_reminder_message, get_weekly_report_message, get_successful_deal_message, get_group_daily_summary
 from deals import get_won_deals_today
 
 class TaskScheduler:
@@ -26,12 +26,20 @@ class TaskScheduler:
     
     def setup_jobs(self):
         """Настроить задачи планировщика"""
-        # Ежедневное напоминание в 9:00
+        # Ежедневное напоминание в 9:00 (личные)
         self.scheduler.add_job(
             self.send_daily_reminders,
             CronTrigger(hour=9, minute=0, timezone=config.DEFAULT_TIMEZONE),
             id='daily_reminder',
             name='Ежедневное напоминание о задачах'
+        )
+        
+        # Ежедневная сводка в группу в 9:05
+        self.scheduler.add_job(
+            self.send_group_daily_summary,
+            CronTrigger(hour=9, minute=5, timezone=config.DEFAULT_TIMEZONE),
+            id='group_daily_summary',
+            name='Ежедневная сводка в группу'
         )
         
         # Еженедельный отчет в понедельник в 9:00
@@ -67,6 +75,35 @@ class TaskScheduler:
         except Exception as e:
             print(f"Error in send_daily_reminders: {e}")
     
+    async def send_group_daily_summary(self):
+        """Отправить ежедневную сводку в групповой чат"""
+        try:
+            # Получаем настройки уведомлений
+            notification_prefs = firebase.get_by_id('notificationPrefs', 'default')
+            if not notification_prefs:
+                return
+            
+            telegram_chat_id = notification_prefs.get('telegramGroupChatId')
+            if not telegram_chat_id:
+                print("No telegramGroupChatId in notification preferences")
+                return
+            
+            message = get_group_daily_summary()
+            if message:
+                try:
+                    await self.bot.send_message(
+                        chat_id=telegram_chat_id,
+                        text=message,
+                        parse_mode='HTML'
+                    )
+                    print(f"Group daily summary sent to {telegram_chat_id}")
+                except Exception as e:
+                    print(f"Error sending group daily summary to {telegram_chat_id}: {e}")
+            else:
+                print("No message to send for group daily summary")
+        except Exception as e:
+            print(f"Error in send_group_daily_summary: {e}")
+    
     async def send_weekly_report(self):
         """Отправить еженедельный отчет в групповой чат"""
         try:
@@ -75,7 +112,7 @@ class TaskScheduler:
             if not notification_prefs:
                 return
             
-            telegram_chat_id = notification_prefs.get('telegramChatId')
+            telegram_chat_id = notification_prefs.get('telegramGroupChatId')
             if not telegram_chat_id:
                 return
             

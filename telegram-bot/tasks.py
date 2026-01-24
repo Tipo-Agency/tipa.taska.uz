@@ -54,6 +54,88 @@ def get_overdue_tasks(user_id: str) -> List[Dict[str, Any]]:
     
     return overdue_tasks
 
+def get_yesterday_tasks() -> List[Dict[str, Any]]:
+    """Получить задачи на вчера (не выполненные)"""
+    try:
+        from utils import get_today_date
+        from datetime import datetime, timedelta
+        import pytz
+        
+        tz = pytz.timezone('Asia/Tashkent')
+        today = datetime.now(tz).date()
+        yesterday = today - timedelta(days=1)
+        yesterday_str = yesterday.isoformat()
+        
+        all_tasks = firebase.get_all('tasks')
+        yesterday_tasks = []
+        
+        for task in all_tasks:
+            if task.get('isArchived'):
+                continue
+            
+            # Исключаем выполненные задачи
+            status = task.get('status', '')
+            if status in ['Выполнено', 'Done', 'Завершено']:
+                continue
+            
+            end_date = task.get('endDate', '')
+            if end_date == yesterday_str:
+                yesterday_tasks.append(task)
+        
+        return yesterday_tasks
+    except Exception as e:
+        print(f"Error getting yesterday tasks: {e}")
+        return []
+
+def get_all_today_tasks() -> List[Dict[str, Any]]:
+    """Получить все задачи на сегодня (не только для конкретного пользователя)"""
+    try:
+        from utils import get_today_date
+        
+        today = get_today_date()
+        all_tasks = firebase.get_all('tasks')
+        
+        today_tasks = []
+        for task in all_tasks:
+            if task.get('isArchived'):
+                continue
+            
+            # Исключаем выполненные задачи
+            status = task.get('status', '')
+            if status in ['Выполнено', 'Done', 'Завершено']:
+                continue
+            
+            if task.get('endDate') == today:
+                today_tasks.append(task)
+        
+        return today_tasks
+    except Exception as e:
+        print(f"Error getting all today tasks: {e}")
+        return []
+
+def get_all_overdue_tasks() -> List[Dict[str, Any]]:
+    """Получить все просроченные задачи (не только для конкретного пользователя)"""
+    try:
+        all_tasks = firebase.get_all('tasks')
+        
+        overdue_tasks = []
+        for task in all_tasks:
+            if task.get('isArchived'):
+                continue
+            
+            # Исключаем выполненные задачи
+            status = task.get('status', '')
+            if status in ['Выполнено', 'Done', 'Завершено']:
+                continue
+            
+            if is_overdue(task.get('endDate', '')):
+                overdue_tasks.append(task)
+        
+        return overdue_tasks
+    except Exception as e:
+        print(f"Error getting all overdue tasks: {e}")
+        return []
+
 def get_task_by_id(task_id: str) -> Optional[Dict[str, Any]]:
     """Получить задачу по ID"""
     return firebase.get_by_id('tasks', task_id)

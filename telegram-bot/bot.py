@@ -26,7 +26,8 @@ from firebase_client import firebase
 from keyboards import (
     get_main_menu, get_tasks_menu, get_deals_menu, get_deal_menu, get_task_menu,
     get_settings_menu, get_profile_menu, get_statuses_keyboard, get_stages_keyboard,
-    get_funnels_keyboard, get_clients_keyboard, get_users_keyboard, get_confirm_keyboard
+    get_funnels_keyboard, get_clients_keyboard, get_users_keyboard, get_confirm_keyboard,
+    get_back_button
 )
 from messages import format_task_message, format_deal_message
 from tasks import (
@@ -317,6 +318,66 @@ async def tasks_overdue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 @require_auth
+async def tasks_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Все задачи пользователя"""
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_user_id = update.effective_user.id
+    user_id = user_sessions[telegram_user_id]['user_id']
+    
+    tasks = get_user_tasks(user_id)
+    users = firebase.get_all('users')
+    projects = firebase.get_all('projects')
+    
+    if not tasks:
+        await query.edit_message_text(
+            "✅ У вас нет задач!",
+            reply_markup=get_tasks_menu()
+        )
+        return
+    
+    message = f"📋 Все ваши задачи ({len(tasks)}):\n\n"
+    keyboard = []
+    for task in tasks[:20]:  # Ограничиваем 20 задачами
+        task_id = task.get('id', '')
+        task_title = task.get('title', 'Без названия')[:30]
+        status = task.get('status', '')
+        keyboard.append([
+            InlineKeyboardButton(
+                f"📋 {task_title} ({status})",
+                callback_data=f"task_{task_id}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+@require_auth
+async def task_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создать новую задачу"""
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_user_id = update.effective_user.id
+    user_id = user_sessions[telegram_user_id]['user_id']
+    
+    # Устанавливаем состояние для создания задачи
+    user_states[telegram_user_id] = {
+        'state': 'creating_task',
+        'data': {}
+    }
+    
+    await query.edit_message_text(
+        "➕ Создание новой задачи\n\n"
+        "Введите название задачи:",
+        reply_markup=get_back_button("menu_tasks")
+    )
+
+@require_auth
 async def task_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальная информация о задаче"""
     query = update.callback_query
@@ -387,10 +448,49 @@ async def deals_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    deals = get_all_deals()
+    # Получаем только активные сделки (не архивные)
+    deals = get_all_deals(include_archived=False)
+    funnels = get_sales_funnels()
+    
+    if not deals:
+        await query.edit_message_text(
+            "📭 Сделок нет",
+            reply_markup=get_deals_menu()
+        )
+        return
+    
+    # Показываем список воронок для фильтрации
+    if funnels:
+        message = f"🎯 Все сделки ({len(deals)})\n\nВыберите воронку для фильтрации:"
+        keyboard = []
+        keyboard.append([InlineKeyboardButton("📊 Все сделки", callback_data="deals_all_show")])
+        for funnel in funnels:
+            funnel_name = funnel.get('name', funnel.get('id', ''))[:30]
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"🎯 {funnel_name}",
+                    callback_data=f"deals_funnel_{funnel.get('id', '')}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_deals")])
+        
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        # Если воронок нет, показываем все сделки
+        await deals_all_show(update, context)
+
+@require_auth
+async def deals_all_show(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать все сделки (без фильтрации)"""
+    query = update.callback_query
+    await query.answer()
+    
+    deals = get_all_deals(include_archived=False)
     clients = firebase.get_all('clients')
     users = firebase.get_all('users')
-    funnels = get_sales_funnels()
     
     if not deals:
         await query.edit_message_text(
@@ -416,6 +516,120 @@ async def deals_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+@require_auth
+async def deals_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сделки по воронке"""
+    query = update.callback_query
+    await query.answer()
+    
+    parts = query.data.split('_')
+    funnel_id = parts[2] if len(parts) > 2 else None
+    
+    if not funnel_id:
+        await query.answer("❌ Воронка не указана")
+        return
+    
+    deals = get_all_deals(include_archived=False)
+    funnel = firebase.get_by_id('salesFunnels', funnel_id)
+    
+    if not funnel:
+        await query.answer("❌ Воронка не найдена")
+        return
+    
+    # Фильтруем сделки по воронке
+    funnel_deals = [d for d in deals if d.get('funnelId') == funnel_id]
+    
+    if not funnel_deals:
+        await query.edit_message_text(
+            f"📭 Сделок в воронке '{funnel.get('name', '')}' нет",
+            reply_markup=get_deals_menu()
+        )
+        return
+    
+    message = f"🎯 Сделки в воронке '{funnel.get('name', '')}' ({len(funnel_deals)}):\n\n"
+    keyboard = []
+    for deal in funnel_deals[:20]:
+        deal_id = deal.get('id', '')
+        deal_title = deal.get('title', deal.get('contactName', 'Без названия'))[:30]
+        keyboard.append([
+            InlineKeyboardButton(
+                f"🎯 {deal_title}",
+                callback_data=f"deal_{deal_id}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="deals_all")])
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+@require_auth
+async def deals_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Мои заявки"""
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_user_id = update.effective_user.id
+    user_id = user_sessions[telegram_user_id]['user_id']
+    
+    deals = get_user_deals(user_id, include_archived=False)
+    clients = firebase.get_all('clients')
+    users = firebase.get_all('users')
+    
+    if not deals:
+        await query.edit_message_text(
+            "📭 У вас нет заявок",
+            reply_markup=get_deals_menu()
+        )
+        return
+    
+    message = f"👤 Мои заявки ({len(deals)}):\n\n"
+    keyboard = []
+    for deal in deals[:20]:  # Ограничиваем 20 сделками
+        deal_id = deal.get('id', '')
+        deal_title = deal.get('title', deal.get('contactName', 'Без названия'))[:30]
+        keyboard.append([
+            InlineKeyboardButton(
+                f"🎯 {deal_title}",
+                callback_data=f"deal_{deal_id}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_deals")])
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+@require_auth
+async def deal_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создать новую заявку"""
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_user_id = update.effective_user.id
+    user_id = user_sessions[telegram_user_id]['user_id']
+    
+    # Устанавливаем состояние для создания сделки
+    user_states[telegram_user_id] = {
+        'state': 'creating_deal',
+        'data': {'assigneeId': user_id}
+    }
+    
+    # Показываем выбор воронки
+    funnels = get_sales_funnels()
+    if funnels:
+        await query.edit_message_text(
+            "➕ Создание новой заявки\n\nВыберите воронку:",
+            reply_markup=get_funnels_keyboard(funnels, "deal_create_funnel")
+        )
+    else:
+        await query.edit_message_text(
+            "➕ Создание новой заявки\n\nВведите название заявки:",
+            reply_markup=get_back_button("menu_deals")
+        )
 
 @require_auth
 async def deal_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -524,6 +738,40 @@ async def menu_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("⚙️ Настройки", reply_markup=get_settings_menu())
 
 @require_auth
+async def settings_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Настройки уведомлений"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Получаем настройки уведомлений
+    notification_prefs = firebase.get_by_id('notificationPrefs', 'default')
+    
+    if not notification_prefs:
+        notification_prefs = {
+            'telegramPersonal': True,
+            'telegramGroup': False,
+            'telegramGroupChatId': None
+        }
+    
+    message = (
+        "🔔 Настройки уведомлений\n\n"
+        f"📱 Личные уведомления: {'✅ Включены' if notification_prefs.get('telegramPersonal') else '❌ Выключены'}\n"
+        f"👥 Групповые уведомления: {'✅ Включены' if notification_prefs.get('telegramGroup') else '❌ Выключены'}\n"
+    )
+    
+    if notification_prefs.get('telegramGroupChatId'):
+        message += f"💬 ID группового чата: {notification_prefs.get('telegramGroupChatId')}\n"
+    
+    message += "\n⚠️ Для изменения настроек используйте веб-версию приложения."
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_settings")]]
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+@require_auth
 async def menu_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню помощи"""
     query = update.callback_query
@@ -584,7 +832,7 @@ async def periodic_check(context: ContextTypes.DEFAULT_TYPE):
         won_deals = get_won_deals_today()
         if won_deals:
             notification_prefs = firebase.get_by_id('notificationPrefs', 'default')
-            telegram_chat_id = notification_prefs.get('telegramChatId') if notification_prefs else None
+            telegram_chat_id = notification_prefs.get('telegramGroupChatId') if notification_prefs else None
             
             if telegram_chat_id:
                 clients = firebase.get_all('clients')
@@ -595,10 +843,14 @@ async def periodic_check(context: ContextTypes.DEFAULT_TYPE):
                         try:
                             await context.bot.send_message(
                                 chat_id=telegram_chat_id,
-                                text=message
+                                text=message,
+                                parse_mode='HTML'
                             )
+                            logger.info(f"Successfully sent deal notification to group {telegram_chat_id}")
                         except Exception as e:
                             logger.error(f"Error sending successful deal message: {e}")
+            else:
+                logger.warning("No telegramGroupChatId configured for deal notifications")
     
     except Exception as e:
         logger.error(f"Error in periodic_check: {e}")
@@ -674,6 +926,9 @@ def main():
     # Это гарантирует, что мы увидим все обновления ДО их обработки другими обработчиками
     # MessageHandler с filters.ALL ловит все сообщения
     application.add_handler(MessageHandler(filters.ALL, log_update), group=-1)
+    
+    # Обработчик текстовых сообщений для создания задач и сделок
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     # Также добавляем обработчик для callback_query
     application.add_handler(CallbackQueryHandler(log_update), group=-1)
     logger.info("[BOT] Logging handlers registered in group -1 (will see ALL updates)")
@@ -704,14 +959,23 @@ def main():
     application.add_handler(CallbackQueryHandler(menu_tasks, pattern='^menu_tasks$'))
     application.add_handler(CallbackQueryHandler(tasks_today, pattern='^tasks_today$'))
     application.add_handler(CallbackQueryHandler(tasks_overdue, pattern='^tasks_overdue$'))
+    application.add_handler(CallbackQueryHandler(tasks_all, pattern='^tasks_all$'))
+    application.add_handler(CallbackQueryHandler(task_create, pattern='^task_create$'))
     application.add_handler(CallbackQueryHandler(task_detail, pattern='^task_[^_]+$'))
     application.add_handler(CallbackQueryHandler(task_set_status, pattern='^task_set_status_'))
     application.add_handler(CallbackQueryHandler(menu_deals, pattern='^menu_deals$'))
     application.add_handler(CallbackQueryHandler(deals_all, pattern='^deals_all$'))
+    application.add_handler(CallbackQueryHandler(deals_all_show, pattern='^deals_all_show$'))
+    application.add_handler(CallbackQueryHandler(deals_funnel, pattern='^deals_funnel_'))
+    application.add_handler(CallbackQueryHandler(deals_mine, pattern='^deals_mine$'))
+    application.add_handler(CallbackQueryHandler(deal_create, pattern='^deal_create$'))
+    application.add_handler(CallbackQueryHandler(deal_create_funnel, pattern='^deal_create_funnel_'))
     application.add_handler(CallbackQueryHandler(deal_detail, pattern='^deal_[^_]+$'))
     application.add_handler(CallbackQueryHandler(deal_set_stage, pattern='^deal_set_stage_'))
+    application.add_handler(CallbackQueryHandler(deal_delete, pattern='^deal_delete_'))
     application.add_handler(CallbackQueryHandler(menu_profile, pattern='^menu_profile$'))
     application.add_handler(CallbackQueryHandler(menu_settings, pattern='^menu_settings$'))
+    application.add_handler(CallbackQueryHandler(settings_notifications, pattern='^settings_notifications$'))
     application.add_handler(CallbackQueryHandler(menu_help, pattern='^menu_help$'))
     
     # Периодическая проверка (каждые 30 секунд)

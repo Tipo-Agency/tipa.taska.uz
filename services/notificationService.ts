@@ -63,14 +63,42 @@ export const notifyTaskCreated = async (
     // Telegram уведомление
     if (!skipTelegram && notificationPrefs?.newTask) {
       const assigneeName = assigneeUser ? assigneeUser.name : 'Не назначено';
-      const userTelegramChatId = getUserTelegramChatId(assigneeUser);
-      await sendTelegramNotification(
-        formatNewTaskMessage(task.title, task.priority, task.endDate, assigneeName, null),
-        undefined,
-        notificationPrefs.newTask,
-        userTelegramChatId,
-        notificationPrefs.telegramGroupChatId
-      );
+      
+      // Отправляем уведомление исполнителю (если назначен)
+      if (assigneeUser) {
+        const assigneeTelegramChatId = getUserTelegramChatId(assigneeUser);
+        if (assigneeTelegramChatId) {
+          await sendTelegramNotification(
+            formatNewTaskMessage(task.title, task.priority, task.endDate, assigneeName, null),
+            undefined,
+            notificationPrefs.newTask,
+            assigneeTelegramChatId,
+            notificationPrefs.telegramGroupChatId
+          );
+        } else {
+          console.warn('[NOTIFICATION] Assignee has no telegramUserId:', assigneeUser.id);
+        }
+      }
+      
+      // Также отправляем уведомление создателю, если он не является исполнителем
+      const creatorId = task.createdByUserId || currentUser?.id;
+      if (creatorId && (!assigneeUser || assigneeUser.id !== creatorId)) {
+        const creatorUser = allUsers.find(u => u.id === creatorId);
+        if (creatorUser) {
+          const creatorTelegramChatId = getUserTelegramChatId(creatorUser);
+          if (creatorTelegramChatId) {
+            await sendTelegramNotification(
+              formatNewTaskMessage(task.title, task.priority, task.endDate, assigneeName, null),
+              undefined,
+              notificationPrefs.newTask,
+              creatorTelegramChatId,
+              notificationPrefs.telegramGroupChatId
+            );
+          } else {
+            console.warn('[NOTIFICATION] Creator has no telegramUserId:', creatorId);
+          }
+        }
+      }
     }
   } catch (error) {
     console.error('[NOTIFICATION] Error notifying task created:', error);

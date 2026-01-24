@@ -1,7 +1,7 @@
 """
 Клавиатуры (меню и кнопки) для Telegram бота
 """
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 def get_main_menu() -> InlineKeyboardMarkup:
     """Главное меню бота"""
@@ -10,6 +10,7 @@ def get_main_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🎯 Все сделки", callback_data="menu_deals")],
         [InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings")],
         [InlineKeyboardButton("👤 Профиль", callback_data="menu_profile")],
+        [InlineKeyboardButton("🌐 Открыть веб-приложение", web_app=WebAppInfo(url="https://tipa.taska.uz/"))],
         [InlineKeyboardButton("❓ Помощь", callback_data="menu_help")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -42,7 +43,7 @@ def get_deal_menu(deal_id: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("✏️ Редактировать", callback_data=f"deal_edit_{deal_id}")],
         [InlineKeyboardButton("📊 Изменить стадию", callback_data=f"deal_stage_{deal_id}")],
         [InlineKeyboardButton("📋 Создать задачу", callback_data=f"deal_task_{deal_id}")],
-        [InlineKeyboardButton("🗑️ Удалить", callback_data=f"deal_delete_{deal_id}")],
+        [InlineKeyboardButton("🗑️ В архив", callback_data=f"deal_delete_{deal_id}")],
         [InlineKeyboardButton("🔙 Назад", callback_data="menu_deals")]
     ]
     return InlineKeyboardMarkup(keyboard)
