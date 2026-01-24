@@ -108,26 +108,25 @@ jobs:
               else
                 echo "   ⚠️ telegram-bot.service file not found in bot directory"
                 echo "   Creating systemd service manually..."
-                cat << 'SERVICEEOF' | sudo tee /etc/systemd/system/telegram-bot.service > /dev/null
-[Unit]
-Description=Telegram Bot for Task Management System
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/var/www/tipa.taska.uz/telegram-bot
-Environment="PATH=/var/www/tipa.taska.uz/telegram-bot/venv/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=/var/www/tipa.taska.uz/telegram-bot/.env
-ExecStart=/var/www/tipa.taska.uz/telegram-bot/venv/bin/python /var/www/tipa.taska.uz/telegram-bot/bot.py
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-SERVICEEOF
+                printf '%s\n' \
+                  '[Unit]' \
+                  'Description=Telegram Bot for Task Management System' \
+                  'After=network.target' \
+                  '' \
+                  '[Service]' \
+                  'Type=simple' \
+                  'User=root' \
+                  'WorkingDirectory=/var/www/tipa.taska.uz/telegram-bot' \
+                  'Environment="PATH=/var/www/tipa.taska.uz/telegram-bot/venv/bin:/usr/local/bin:/usr/bin:/bin"' \
+                  'EnvironmentFile=/var/www/tipa.taska.uz/telegram-bot/.env' \
+                  'ExecStart=/var/www/tipa.taska.uz/telegram-bot/venv/bin/python /var/www/tipa.taska.uz/telegram-bot/bot.py' \
+                  'Restart=always' \
+                  'RestartSec=10' \
+                  'StandardOutput=journal' \
+                  'StandardError=journal' \
+                  '' \
+                  '[Install]' \
+                  'WantedBy=multi-user.target' | sudo tee /etc/systemd/system/telegram-bot.service > /dev/null
                 sudo chmod 644 /etc/systemd/system/telegram-bot.service
                 sudo systemctl daemon-reload
                 echo "   ✅ Systemd service created and reloaded"
