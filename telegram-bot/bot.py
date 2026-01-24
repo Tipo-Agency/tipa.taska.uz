@@ -1328,6 +1328,10 @@ async def menu_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений для создания задач и сделок"""
+    # КРИТИЧЕСКИ ВАЖНО: Проверяем команды в самом начале
+    if update.message and update.message.text and update.message.text.startswith('/'):
+        return  # Игнорируем команды - они обрабатываются CommandHandler'ами
+    
     telegram_user_id = update.effective_user.id
     
     # Проверяем авторизацию
@@ -2058,16 +2062,10 @@ def main():
     # ConversationHandler для создания задачи из сообщения (регистрируем последним)
     application.add_handler(task_from_message_handler)
     
-    # Обработчик текстовых сообщений для создания задач и сделок (регистрируем ПОСЛЕ ConversationHandler'ов)
-    # Это позволяет ConversationHandler'ам обрабатывать сообщения в своих состояниях
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    logger.info("[BOT] Registering callback query handlers...")
     
-    # Регистрируем обработчик ошибок
-    application.add_error_handler(error_handler)
-    
-    logger.info("[BOT] All handlers registered")
-    
-    # Обработчики callback_query
+    # Обработчики callback_query (регистрируем ПОСЛЕ CommandHandler'ов и ConversationHandler'ов, НО ДО MessageHandler'ов)
+    # Это критически важно для правильной обработки callback_query
     application.add_handler(CallbackQueryHandler(menu_main, pattern='^menu_main$'))
     application.add_handler(CallbackQueryHandler(menu_tasks, pattern='^menu_tasks$'))
     application.add_handler(CallbackQueryHandler(tasks_today, pattern='^tasks_today$'))
@@ -2110,6 +2108,17 @@ def main():
     )
     application.add_handler(group_chat_id_handler)
     application.add_handler(CallbackQueryHandler(menu_help, pattern='^menu_help$'))
+    
+    logger.info("[BOT] Registering message handlers...")
+    
+    # Обработчик текстовых сообщений для создания задач и сделок (регистрируем ПОСЛЕ всех остальных)
+    # Это позволяет ConversationHandler'ам и CallbackQueryHandler'ам обрабатывать сообщения первыми
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    
+    # Регистрируем обработчик ошибок
+    application.add_error_handler(error_handler)
+    
+    logger.info("[BOT] All handlers registered successfully")
     
     # Периодическая проверка (каждые 30 секунд)
     job_queue = application.job_queue
