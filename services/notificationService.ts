@@ -159,14 +159,37 @@ export const notifyDealCreated = async (
 
     // Telegram уведомление
     if (!skipTelegram && notificationPrefs?.dealCreated) {
-      const userTelegramChatId = getUserTelegramChatId(assigneeUser);
-      await sendTelegramNotification(
-        formatDealMessage(deal.title, deal.stage, deal.amount, assigneeUser?.name || 'Не назначено'),
-        undefined,
-        notificationPrefs.dealCreated,
-        userTelegramChatId,
-        notificationPrefs.telegramGroupChatId
-      );
+      // Отправляем уведомление ответственному (если назначен)
+      if (assigneeUser) {
+        const userTelegramChatId = getUserTelegramChatId(assigneeUser);
+        if (userTelegramChatId) {
+          await sendTelegramNotification(
+            formatDealMessage(deal.title, deal.stage, deal.amount, assigneeUser.name || 'Не назначено'),
+            undefined,
+            notificationPrefs.dealCreated,
+            userTelegramChatId,
+            notificationPrefs.telegramGroupChatId
+          );
+        }
+      }
+      
+      // Отправляем уведомление всем администраторам
+      const adminUsers = allUsers.filter(user => user.role === 'ADMIN' && !user.isArchived);
+      for (const admin of adminUsers) {
+        const adminTelegramChatId = getUserTelegramChatId(admin);
+        if (adminTelegramChatId && notificationPrefs.dealCreated.telegramPersonal) {
+          // Отправляем только если администратор не является ответственным
+          if (!assigneeUser || admin.id !== assigneeUser.id) {
+            await sendTelegramNotification(
+              `🆕 <b>Новая заявка</b>\n\n<b>Название:</b> ${deal.title}\n<b>Стадия:</b> ${deal.stage}\n<b>Сумма:</b> ${deal.amount?.toLocaleString() || 0} ${deal.currency || 'UZS'}\n<b>Создал:</b> ${currentUser?.name || 'Неизвестно'}\n<b>Ответственный:</b> ${assigneeUser?.name || 'Не назначено'}`,
+              undefined,
+              notificationPrefs.dealCreated,
+              adminTelegramChatId,
+              notificationPrefs.telegramGroupChatId
+            );
+          }
+        }
+      }
     }
   } catch (error) {
     console.error('[NOTIFICATION] Error notifying deal created:', error);

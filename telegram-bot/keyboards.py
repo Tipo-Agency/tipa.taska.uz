@@ -30,6 +30,7 @@ def get_deals_menu() -> InlineKeyboardMarkup:
     """Меню сделок"""
     keyboard = [
         [InlineKeyboardButton("🎯 Все сделки", callback_data="deals_all")],
+        [InlineKeyboardButton("🆕 Новые заявки", callback_data="deals_new")],
         [InlineKeyboardButton("👤 Мои заявки", callback_data="deals_mine")],
         [InlineKeyboardButton("➕ Создать заявку", callback_data="deal_create")],
         [InlineKeyboardButton("🔍 Поиск", callback_data="deal_search")],

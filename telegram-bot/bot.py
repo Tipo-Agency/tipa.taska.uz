@@ -248,81 +248,124 @@ async def menu_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_auth
 async def tasks_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Задачи на сегодня"""
-    query = update.callback_query
-    await query.answer()
-    
-    telegram_user_id = update.effective_user.id
-    user_id = user_sessions[telegram_user_id]['user_id']
-    
-    tasks = get_today_tasks(user_id)
-    users = firebase.get_all('users')
-    projects = firebase.get_all('projects')
-    
-    if not tasks:
-        await query.edit_message_text(
-            "✅ На сегодня задач нет!",
-            reply_markup=get_tasks_menu()
-        )
-        return
-    
-    message = f"📋 Задачи на сегодня ({len(tasks)}):\n\n"
-    keyboard = []
-    for task in tasks[:10]:  # Ограничиваем 10 задачами
-        task_id = task.get('id', '')
-        task_title = task.get('title', 'Без названия')[:30]
-        keyboard.append([
-            InlineKeyboardButton(
-                f"📋 {task_title}",
-                callback_data=f"task_{task_id}"
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        telegram_user_id = update.effective_user.id
+        if telegram_user_id not in user_sessions:
+            await query.answer("❌ Вы не авторизованы")
+            return
+        
+        user_id = user_sessions[telegram_user_id]['user_id']
+        
+        logger.info(f"[TASKS_TODAY] Getting today tasks for user_id: {user_id}")
+        tasks = get_today_tasks(user_id)
+        logger.info(f"[TASKS_TODAY] Found {len(tasks)} today tasks")
+        
+        if not tasks:
+            await query.edit_message_text(
+                "✅ На сегодня задач нет!",
+                reply_markup=get_tasks_menu()
             )
-        ])
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
-    
-    await query.edit_message_text(
-        message,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+            return
+        
+        message = f"📋 Задачи на сегодня ({len(tasks)}):\n\n"
+        keyboard = []
+        for task in tasks[:10]:  # Ограничиваем 10 задачами
+            task_id = task.get('id', '')
+            task_title = task.get('title', 'Без названия')[:30]
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"📋 {task_title}",
+                    callback_data=f"task_{task_id}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
+        
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    except KeyError as e:
+        logger.error(f"Error in tasks_today (KeyError): {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                "❌ Ошибка авторизации. Попробуйте /start",
+                reply_markup=get_tasks_menu()
+            )
+        except:
+            pass
+    except Exception as e:
+        logger.error(f"Error in tasks_today: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                "❌ Произошла ошибка при получении задач. Попробуйте еще раз.",
+                reply_markup=get_tasks_menu()
+            )
+        except:
+            pass
 
 @require_auth
 async def tasks_overdue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Просроченные задачи"""
-    query = update.callback_query
-    await query.answer()
-    
-    telegram_user_id = update.effective_user.id
-    user_id = user_sessions[telegram_user_id]['user_id']
-    
-    logger.info(f"[TASKS_OVERDUE] Getting overdue tasks for user_id: {user_id}")
-    tasks = get_overdue_tasks(user_id)
-    logger.info(f"[TASKS_OVERDUE] Found {len(tasks)} overdue tasks")
-    
-    users = firebase.get_all('users')
-    projects = firebase.get_all('projects')
-    
-    if not tasks:
-        await query.edit_message_text(
-            "✅ Просроченных задач нет!",
-            reply_markup=get_tasks_menu()
-        )
-        return
-    
-    message = f"⚠️ Просроченные задачи ({len(tasks)}):\n\n"
-    keyboard = []
-    for task in tasks[:10]:  # Ограничиваем 10 задачами
-        task_id = task.get('id', '')
-        task_title = task.get('title', 'Без названия')[:30]
-        keyboard.append([
-            InlineKeyboardButton(
-                f"⚠️ {task_title}",
-                callback_data=f"task_{task_id}"
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        telegram_user_id = update.effective_user.id
+        if telegram_user_id not in user_sessions:
+            await query.answer("❌ Вы не авторизованы")
+            return
+        
+        user_id = user_sessions[telegram_user_id]['user_id']
+        
+        logger.info(f"[TASKS_OVERDUE] Getting overdue tasks for user_id: {user_id}")
+        tasks = get_overdue_tasks(user_id)
+        logger.info(f"[TASKS_OVERDUE] Found {len(tasks)} overdue tasks")
+        
+        if not tasks:
+            await query.edit_message_text(
+                "✅ Просроченных задач нет!",
+                reply_markup=get_tasks_menu()
             )
-        ])
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
-    
-    await query.edit_message_text(
-        message,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+            return
+        
+        message = f"⚠️ Просроченные задачи ({len(tasks)}):\n\n"
+        keyboard = []
+        for task in tasks[:10]:  # Ограничиваем 10 задачами
+            task_id = task.get('id', '')
+            task_title = task.get('title', 'Без названия')[:30]
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"⚠️ {task_title}",
+                    callback_data=f"task_{task_id}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_tasks")])
+        
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    except KeyError as e:
+        logger.error(f"Error in tasks_overdue (KeyError): {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                "❌ Ошибка авторизации. Попробуйте /start",
+                reply_markup=get_tasks_menu()
+            )
+        except:
+            pass
+    except Exception as e:
+        logger.error(f"Error in tasks_overdue: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                "❌ Произошла ошибка при получении задач. Попробуйте еще раз.",
+                reply_markup=get_tasks_menu()
+            )
+        except:
+            pass
 
 @require_auth
 async def tasks_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -535,7 +578,7 @@ async def deals_all_show(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @require_auth
 async def deals_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сделки по воронке"""
+    """Сделки по воронке - выбор этапа"""
     query = update.callback_query
     await query.answer()
     
@@ -546,24 +589,83 @@ async def deals_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("❌ Воронка не указана")
         return
     
-    deals = get_all_deals(include_archived=False)
     funnel = firebase.get_by_id('salesFunnels', funnel_id)
     
     if not funnel:
         await query.answer("❌ Воронка не найдена")
         return
     
-    # Фильтруем сделки по воронке
-    funnel_deals = [d for d in deals if d.get('funnelId') == funnel_id]
+    # Получаем стадии воронки
+    stages = get_funnel_stages(funnel_id)
     
-    if not funnel_deals:
+    if not stages:
         await query.edit_message_text(
-            f"📭 Сделок в воронке '{funnel.get('name', '')}' нет",
+            f"❌ В воронке '{funnel.get('name', '')}' нет стадий",
             reply_markup=get_deals_menu()
         )
         return
     
-    message = f"🎯 Сделки в воронке '{funnel.get('name', '')}' ({len(funnel_deals)}):\n\n"
+    # Показываем выбор стадии
+    message = f"🎯 Воронка: {funnel.get('name', '')}\n\nВыберите этап воронки:"
+    keyboard = []
+    keyboard.append([InlineKeyboardButton("📊 Все этапы", callback_data=f"deals_funnel_stage_all_{funnel_id}")])
+    for stage in stages:
+        stage_name = stage.get('name', stage.get('id', ''))[:30]
+        keyboard.append([
+            InlineKeyboardButton(
+                f"📌 {stage_name}",
+                callback_data=f"deals_funnel_stage_{funnel_id}_{stage.get('id', '')}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="deals_all")])
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+@require_auth
+async def deals_funnel_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сделки по воронке и этапу"""
+    query = update.callback_query
+    await query.answer()
+    
+    parts = query.data.split('_')
+    funnel_id = parts[3] if len(parts) > 3 else None
+    stage_id = parts[4] if len(parts) > 4 else None
+    
+    if not funnel_id:
+        await query.answer("❌ Воронка не указана")
+        return
+    
+    funnel = firebase.get_by_id('salesFunnels', funnel_id)
+    
+    if not funnel:
+        await query.answer("❌ Воронка не найдена")
+        return
+    
+    deals = get_all_deals(include_archived=False)
+    
+    # Фильтруем сделки по воронке и этапу
+    if stage_id == 'all':
+        # Все сделки воронки
+        funnel_deals = [d for d in deals if d.get('funnelId') == funnel_id]
+        stage_name = "Все этапы"
+    else:
+        # Сделки конкретного этапа
+        funnel_deals = [d for d in deals if d.get('funnelId') == funnel_id and d.get('stage') == stage_id]
+        stages = get_funnel_stages(funnel_id)
+        stage = next((s for s in stages if s.get('id') == stage_id), None)
+        stage_name = stage.get('name', stage_id) if stage else stage_id
+    
+    if not funnel_deals:
+        await query.edit_message_text(
+            f"📭 Сделок в воронке '{funnel.get('name', '')}' на этапе '{stage_name}' нет",
+            reply_markup=get_deals_menu()
+        )
+        return
+    
+    message = f"🎯 Воронка: {funnel.get('name', '')}\n📌 Этап: {stage_name}\n\nСделки ({len(funnel_deals)}):\n\n"
     keyboard = []
     for deal in funnel_deals[:20]:
         deal_id = deal.get('id', '')
@@ -574,7 +676,48 @@ async def deals_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 callback_data=f"deal_{deal_id}"
             )
         ])
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="deals_all")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data=f"deals_funnel_{funnel_id}")])
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+@require_auth
+async def deals_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Новые заявки (на этапе 'НОВАЯ ЗАЯВКА')"""
+    query = update.callback_query
+    await query.answer()
+    
+    deals = get_all_deals(include_archived=False)
+    
+    # Фильтруем сделки на этапе "НОВАЯ ЗАЯВКА"
+    # Ищем по stage = "НОВАЯ ЗАЯВКА" или похожим значениям
+    new_deals = []
+    for deal in deals:
+        stage = deal.get('stage', '').lower()
+        if 'новая' in stage or 'new' in stage or stage == 'new':
+            new_deals.append(deal)
+    
+    if not new_deals:
+        await query.edit_message_text(
+            "📭 Новых заявок нет",
+            reply_markup=get_deals_menu()
+        )
+        return
+    
+    message = f"🆕 Новые заявки ({len(new_deals)}):\n\n"
+    keyboard = []
+    for deal in new_deals[:20]:  # Ограничиваем 20 сделками
+        deal_id = deal.get('id', '')
+        deal_title = deal.get('title', deal.get('contactName', 'Без названия'))[:30]
+        keyboard.append([
+            InlineKeyboardButton(
+                f"🆕 {deal_title}",
+                callback_data=f"deal_{deal_id}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_deals")])
     
     await query.edit_message_text(
         message,
@@ -1262,53 +1405,76 @@ async def settings_group_set_chat_id_input(update: Update, context: ContextTypes
 @require_auth
 async def settings_toggle_notification(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Переключение настройки уведомления"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Получаем название настройки из callback_data
-    setting_name = query.data.replace("settings_toggle_", "")
-    
-    notification_prefs = firebase.get_by_id('notificationPrefs', 'default')
-    if not notification_prefs:
-        notification_prefs = {'id': 'default'}
-    
-    # Получаем текущую настройку
-    current_setting = notification_prefs.get(setting_name, {'telegramPersonal': True, 'telegramGroup': False})
-    
-    # Переключаем личные уведомления
-    current_setting['telegramPersonal'] = not current_setting.get('telegramPersonal', True)
-    
-    # Обновляем настройки
-    notification_prefs[setting_name] = current_setting
-    notification_prefs['id'] = 'default'
-    firebase.save('notificationPrefs', notification_prefs)
-    
-    # Определяем, в какую категорию вернуться
-    category = "settings_notifications"
-    if setting_name.startswith('newTask') or setting_name.startswith('statusChange') or setting_name.startswith('task'):
-        category = "settings_notif_tasks"
-    elif setting_name.startswith('doc'):
-        category = "settings_notif_docs"
-    elif setting_name.startswith('meeting'):
-        category = "settings_notif_meetings"
-    elif setting_name.startswith('deal') or setting_name.startswith('client') or setting_name.startswith('contract'):
-        category = "settings_notif_crm"
-    elif setting_name.startswith('purchase') or setting_name.startswith('finance'):
-        category = "settings_notif_finance"
-    
-    # Возвращаемся в соответствующую категорию
-    if category == "settings_notif_tasks":
-        await settings_notif_tasks(update, context)
-    elif category == "settings_notif_docs":
-        await settings_notif_docs(update, context)
-    elif category == "settings_notif_meetings":
-        await settings_notif_meetings(update, context)
-    elif category == "settings_notif_crm":
-        await settings_notif_crm(update, context)
-    elif category == "settings_notif_finance":
-        await settings_notif_finance(update, context)
-    else:
-        await settings_notifications(update, context)
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        # Получаем название настройки из callback_data
+        setting_name = query.data.replace("settings_toggle_", "")
+        
+        if not setting_name:
+            await query.answer("❌ Ошибка: название настройки не указано")
+            return
+        
+        notification_prefs = firebase.get_by_id('notificationPrefs', 'default')
+        if not notification_prefs:
+            notification_prefs = {'id': 'default'}
+        
+        # Получаем текущую настройку
+        current_setting = notification_prefs.get(setting_name, {'telegramPersonal': True, 'telegramGroup': False})
+        
+        # Если настройка еще не существует, создаем ее
+        if not isinstance(current_setting, dict):
+            current_setting = {'telegramPersonal': True, 'telegramGroup': False}
+        
+        # Переключаем личные уведомления
+        current_setting['telegramPersonal'] = not current_setting.get('telegramPersonal', True)
+        
+        # Обновляем настройки
+        notification_prefs[setting_name] = current_setting
+        notification_prefs['id'] = 'default'
+        firebase.save('notificationPrefs', notification_prefs)
+        
+        # Определяем, в какую категорию вернуться
+        category = "settings_notifications"
+        if setting_name.startswith('newTask') or setting_name.startswith('statusChange') or setting_name.startswith('task'):
+            category = "settings_notif_tasks"
+        elif setting_name.startswith('doc'):
+            category = "settings_notif_docs"
+        elif setting_name.startswith('meeting'):
+            category = "settings_notif_meetings"
+        elif setting_name.startswith('deal') or setting_name.startswith('client') or setting_name.startswith('contract'):
+            category = "settings_notif_crm"
+        elif setting_name.startswith('purchase') or setting_name.startswith('finance'):
+            category = "settings_notif_finance"
+        
+        # Возвращаемся в соответствующую категорию
+        try:
+            if category == "settings_notif_tasks":
+                await settings_notif_tasks(update, context)
+            elif category == "settings_notif_docs":
+                await settings_notif_docs(update, context)
+            elif category == "settings_notif_meetings":
+                await settings_notif_meetings(update, context)
+            elif category == "settings_notif_crm":
+                await settings_notif_crm(update, context)
+            elif category == "settings_notif_finance":
+                await settings_notif_finance(update, context)
+            else:
+                await settings_notifications(update, context)
+        except Exception as category_error:
+            logger.error(f"Error returning to category {category}: {category_error}", exc_info=True)
+            # Если не удалось вернуться в категорию, возвращаемся в главное меню настроек
+            try:
+                await settings_notifications(update, context)
+            except:
+                await query.answer("✅ Настройка изменена")
+    except Exception as e:
+        logger.error(f"Error in settings_toggle_notification: {e}", exc_info=True)
+        try:
+            await query.answer("❌ Произошла ошибка. Попробуйте еще раз.")
+        except:
+            pass
 
 @require_auth
 async def menu_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2077,7 +2243,9 @@ def main():
     application.add_handler(CallbackQueryHandler(menu_deals, pattern='^menu_deals$'))
     application.add_handler(CallbackQueryHandler(deals_all, pattern='^deals_all$'))
     application.add_handler(CallbackQueryHandler(deals_all_show, pattern='^deals_all_show$'))
-    application.add_handler(CallbackQueryHandler(deals_funnel, pattern='^deals_funnel_'))
+    application.add_handler(CallbackQueryHandler(deals_funnel, pattern='^deals_funnel_[^_]+$'))
+    application.add_handler(CallbackQueryHandler(deals_funnel_stage, pattern='^deals_funnel_stage_'))
+    application.add_handler(CallbackQueryHandler(deals_new, pattern='^deals_new$'))
     application.add_handler(CallbackQueryHandler(deals_mine, pattern='^deals_mine$'))
     application.add_handler(CallbackQueryHandler(deal_create, pattern='^deal_create$'))
     application.add_handler(CallbackQueryHandler(deal_create_funnel, pattern='^deal_create_funnel_'))
