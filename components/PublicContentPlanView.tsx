@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ContentPost, TableCollection } from '../types';
-import { Calendar, Instagram, Send, Youtube, Linkedin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Instagram, Send, Youtube, Linkedin, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
 import { api } from '../backend/api';
 import { DynamicIcon } from './AppIcons';
 
@@ -14,6 +14,27 @@ const PublicContentPlanView: React.FC<PublicContentPlanViewProps> = ({ tableId }
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'calendar' | 'table' | 'gantt'>('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
+  
+  // Состояние темы с сохранением в localStorage
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('publicContentPlanDarkMode');
+      if (saved !== null) return saved === 'true';
+      // По умолчанию темная тема
+      return true;
+    }
+    return true;
+  });
+
+  // Применяем класс dark к document.documentElement
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('publicContentPlanDarkMode', String(darkMode));
+  }, [darkMode]);
 
   useEffect(() => {
     // Загружаем данные напрямую из Firebase
@@ -42,11 +63,11 @@ const PublicContentPlanView: React.FC<PublicContentPlanViewProps> = ({ tableId }
 
   const getPlatformIcon = (p: string) => {
     switch (p) {
-      case 'instagram': return <Instagram size={14} className="text-pink-600"/>;
-      case 'telegram': return <Send size={14} className="text-blue-500"/>;
-      case 'youtube': return <Youtube size={14} className="text-red-600"/>;
-      case 'linkedin': return <Linkedin size={14} className="text-blue-700"/>;
-      default: return <Send size={14}/>;
+      case 'instagram': return <Instagram size={14} className="text-pink-600 dark:text-pink-400"/>;
+      case 'telegram': return <Send size={14} className="text-blue-500 dark:text-blue-400"/>;
+      case 'youtube': return <Youtube size={14} className="text-red-600 dark:text-red-400"/>;
+      case 'linkedin': return <Linkedin size={14} className="text-blue-700 dark:text-blue-400"/>;
+      default: return <Send size={14} className="text-gray-600 dark:text-gray-400"/>;
     }
   };
 
@@ -73,25 +94,25 @@ const PublicContentPlanView: React.FC<PublicContentPlanViewProps> = ({ tableId }
 
   const getStatusColor = (s: string) => {
     switch (s) {
-      case 'idea': return 'border-gray-200 bg-gray-50';
-      case 'copywriting': return 'border-blue-200 bg-blue-50';
-      case 'design': return 'border-purple-200 bg-purple-50';
-      case 'approval': return 'border-yellow-200 bg-yellow-50';
-      case 'scheduled': return 'border-green-200 bg-green-50';
-      case 'published': return 'border-emerald-200 bg-emerald-50';
-      default: return 'border-gray-200 bg-gray-50';
+      case 'idea': return 'border-gray-200 dark:border-[#444] bg-gray-50 dark:bg-[#2a2a2a]';
+      case 'copywriting': return 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20';
+      case 'design': return 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20';
+      case 'approval': return 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20';
+      case 'scheduled': return 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20';
+      case 'published': return 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20';
+      default: return 'border-gray-200 dark:border-[#444] bg-gray-50 dark:bg-[#2a2a2a]';
     }
   };
 
   const getStatusBadgeColor = (s: string) => {
     switch (s) {
-      case 'idea': return 'border-gray-200 bg-gray-50 text-gray-700';
-      case 'copywriting': return 'border-blue-200 bg-blue-50 text-blue-700';
-      case 'design': return 'border-purple-200 bg-purple-50 text-purple-700';
-      case 'approval': return 'border-yellow-200 bg-yellow-50 text-yellow-700';
-      case 'scheduled': return 'border-green-200 bg-green-50 text-green-700';
-      case 'published': return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-      default: return 'border-gray-200 bg-gray-50 text-gray-700';
+      case 'idea': return 'border-gray-200 dark:border-[#444] bg-gray-50 dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300';
+      case 'copywriting': return 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300';
+      case 'design': return 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300';
+      case 'approval': return 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300';
+      case 'scheduled': return 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300';
+      case 'published': return 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300';
+      default: return 'border-gray-200 dark:border-[#444] bg-gray-50 dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300';
     }
   };
 
@@ -469,6 +490,18 @@ const PublicContentPlanView: React.FC<PublicContentPlanViewProps> = ({ tableId }
                 </p>
               </div>
             </div>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#2a2a2a] transition-colors"
+              aria-label={darkMode ? 'Переключить на светлую тему' : 'Переключить на темную тему'}
+              title={darkMode ? 'Светлая тема' : 'Темная тема'}
+            >
+              {darkMode ? (
+                <Sun size={20} className="text-gray-600 dark:text-gray-300" />
+              ) : (
+                <Moon size={20} className="text-gray-600 dark:text-gray-300" />
+              )}
+            </button>
           </div>
 
           <div className="flex items-center gap-2 bg-gray-100 dark:bg-[#252525] rounded-full p-1 text-xs">
