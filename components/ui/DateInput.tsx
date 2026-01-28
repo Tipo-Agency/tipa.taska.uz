@@ -31,12 +31,17 @@ export const DateInput: React.FC<DateInputProps> = ({
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleClick = () => {
+  const openPicker = () => {
     if (inputRef.current) {
       try {
+        // `showPicker()` ломает ввод/клики в некоторых WebView (в т.ч. Telegram),
+        // поэтому вызываем его только по кнопке, с безопасным фоллбеком.
         inputRef.current.showPicker();
       } catch (err) {
+        // Фоллбек: просто сфокусировать/кликнуть по полю, чтобы нативный пикер открылся сам
+        // (или позволить ручной ввод).
         inputRef.current.focus();
+        inputRef.current.click();
       }
     }
   };
@@ -55,23 +60,29 @@ export const DateInput: React.FC<DateInputProps> = ({
           type="date"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onClick={handleClick}
           required={required}
           min={min}
           max={max}
           className="w-full bg-white dark:bg-[#252525] text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-[#555] rounded-lg px-4 py-2.5 pr-10 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all date-input-custom"
         />
-        <Calendar 
-          size={16} 
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none" 
-        />
+        <button
+          type="button"
+          onClick={openPicker}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-[#2a2a2a] transition-colors"
+          aria-label="Открыть календарь"
+        >
+          <Calendar
+            size={16}
+            className="text-gray-400 dark:text-gray-500"
+          />
+        </button>
       </div>
       <style>{`
         .date-input-custom::-webkit-calendar-picker-indicator {
           opacity: 0;
           position: absolute;
           right: 0;
-          width: 100%;
+          width: 2.5rem;
           height: 100%;
           cursor: pointer;
         }
