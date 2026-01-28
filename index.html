@@ -4,6 +4,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Типа задачи</title>
     
     <!-- FAVICON PLACEHOLDER -->
@@ -175,6 +178,32 @@
 </head>
   <body>
     <div id="root"></div>
+  <script>
+    // Версия приложения - обновляется при каждом деплое
+    const APP_VERSION = '2.0.1';
+    const STORAGE_KEY = 'tipa_app_version';
+    
+    // Проверяем версию и принудительно обновляем кеш если версия изменилась
+    const savedVersion = localStorage.getItem(STORAGE_KEY);
+    if (savedVersion && savedVersion !== APP_VERSION) {
+      // Версия изменилась - очищаем весь кеш и перезагружаем
+      if ('caches' in window) {
+        caches.keys().then(names => {
+          names.forEach(name => caches.delete(name));
+        });
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(registration => registration.unregister());
+        });
+      }
+      localStorage.setItem(STORAGE_KEY, APP_VERSION);
+      // Перезагружаем страницу для загрузки нового кода
+      window.location.reload();
+    } else if (!savedVersion) {
+      localStorage.setItem(STORAGE_KEY, APP_VERSION);
+    }
+  </script>
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>

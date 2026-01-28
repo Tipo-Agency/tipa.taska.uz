@@ -41,18 +41,28 @@ const PublicContentPlanView: React.FC<PublicContentPlanViewProps> = ({ tableId }
     const loadData = async () => {
       try {
         setLoading(true);
+        console.log('[PublicContentPlanView] Загрузка данных для tableId:', tableId);
+        
         const [allPosts, allTables] = await Promise.all([
           api.contentPosts.getAll(),
           api.tables.getAll(),
         ]);
         
+        console.log('[PublicContentPlanView] Загружено постов:', allPosts.length, 'таблиц:', allTables.length);
+        
         const filteredPosts = allPosts.filter(p => p.tableId === tableId && !p.isArchived);
         const foundTable = allTables.find(t => t.id === tableId);
+        
+        console.log('[PublicContentPlanView] Отфильтровано постов:', filteredPosts.length, 'найдена таблица:', foundTable?.name || 'не найдена');
         
         setPosts(filteredPosts);
         setTable(foundTable || null);
       } catch (err) {
-        console.error('Ошибка загрузки данных:', err);
+        console.error('[PublicContentPlanView] Ошибка загрузки данных:', err);
+        // Показываем пользователю понятное сообщение об ошибке
+        if (err instanceof Error) {
+          console.error('[PublicContentPlanView] Детали ошибки:', err.message, err.stack);
+        }
       } finally {
         setLoading(false);
       }
