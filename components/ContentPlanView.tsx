@@ -154,7 +154,9 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
       setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (post: ContentPost) => {
+  const handleOpenEdit = (post: ContentPost, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      e?.preventDefault();
       setEditingPost(post);
       const postPlatform = Array.isArray(post.platform) ? post.platform : [post.platform as any];
       setTopic(post.topic);
@@ -459,13 +461,13 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                                 <div key={post.id} className="flex h-8 hover:bg-blue-50/30 dark:hover:bg-[#2a2a2a] border-b border-gray-50 dark:border-[#2a2a2a] group relative">
                                     <div 
                                         className="w-48 border-r border-gray-200 dark:border-[#333] shrink-0 px-3 text-xs truncate text-gray-700 dark:text-gray-300 flex items-center cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-[#1e1e1e] z-10"
-                                        onClick={() => handleOpenEdit(post)}
+                                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleOpenEdit(post, e); }}
                                     >
                                         {post.topic}
                                     </div>
                                     <div className="flex-1 relative flex items-center my-1 pr-4">
                                         <div 
-                                            onClick={() => handleOpenEdit(post)}
+                                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleOpenEdit(post, e); }}
                                             className={`absolute h-5 rounded-md border cursor-pointer transition-all shadow-sm flex items-center justify-center z-0 ${getStatusColor(post.status)}`}
                                             style={{ left: `${left}%`, width: `${width}%`, minWidth: '24px' }}
                                             title={`${post.topic} (${new Date(post.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')})`}
@@ -545,7 +547,10 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                                       {dayPosts.map(post => (
                                           <div 
                                             key={post.id} 
-                                            onClick={() => handleOpenEdit(post)} 
+                                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleOpenEdit(post, e); }} 
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenEdit(post); } }}
                                             className={`p-1.5 rounded border text-[10px] cursor-pointer shadow-sm hover:shadow-md transition-all ${getStatusColor(post.status)}`}
                                           >
                                               <div className="flex items-center justify-between mb-1">
@@ -584,7 +589,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-[#333]">
                     {filteredPosts.map(post => (
-                        <tr key={post.id} onClick={() => handleOpenEdit(post)} className="hover:bg-gray-50 dark:hover:bg-[#2a2a2a] cursor-pointer group transition-colors">
+                        <tr key={post.id} onClick={(e) => { e.stopPropagation(); handleOpenEdit(post, e); }} className="hover:bg-gray-50 dark:hover:bg-[#2a2a2a] cursor-pointer group transition-colors">
                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
                               {new Date(post.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')}
                             </td>
@@ -625,7 +630,7 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
                                 key={post.id} 
                                 draggable
                                 onDragStart={(e) => onDragStart(e, post.id)}
-                                onClick={() => handleOpenEdit(post)} 
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleOpenEdit(post, e); }} 
                                 className={`p-3 rounded shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-md transition-all bg-white dark:bg-[#2b2b2b] border-gray-200 dark:border-[#3a3a3a]`}
                             >
                                 <div className="flex justify-between items-start mb-2">
@@ -727,14 +732,14 @@ const ContentPlanView: React.FC<ContentPlanViewProps> = ({
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] animate-in fade-in duration-200" onClick={handleBackdropClick}>
-            <div className="bg-white dark:bg-[#252525] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-[#333] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[200] animate-in fade-in duration-200" onClick={handleBackdropClick} role="dialog" aria-modal="true" aria-labelledby="content-plan-modal-title">
+            <div className="bg-white dark:bg-[#252525] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-[#333] flex flex-col" onClick={e => e.stopPropagation()} data-modal="content-plan-post">
                 <div className="p-4 border-b border-gray-100 dark:border-[#333] flex justify-between items-center bg-white dark:bg-[#252525] shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg text-blue-600 dark:text-blue-400">
                             <FileText size={20} />
                         </div>
-                        <h3 className="font-bold text-lg text-gray-800 dark:text-white">{editingPost ? 'Редактировать пост' : 'Новый пост'}</h3>
+                        <h3 id="content-plan-modal-title" className="font-bold text-lg text-gray-800 dark:text-white">{editingPost ? 'Редактировать пост' : 'Новый пост'}</h3>
                     </div>
                     <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-[#333] transition-colors"><X size={20} /></button>
                 </div>
