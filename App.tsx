@@ -21,6 +21,12 @@ const App = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [firebaseAuthReady, setFirebaseAuthReady] = useState(false);
   const [publicContentPlanId, setPublicContentPlanId] = useState<string | null>(null);
+  const [editTableName, setEditTableName] = useState('');
+
+  useEffect(() => {
+    if (state.editingTable) setEditTableName(state.editingTable.name);
+    else setEditTableName('');
+  }, [state.editingTable?.id, state.editingTable?.name]);
 
   // Telegram Web App initialization - ДОЛЖЕН БЫТЬ ДО ВСЕХ УСЛОВНЫХ RETURN!
   const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
@@ -299,8 +305,38 @@ const App = () => {
         )}
         
         {state.isEditTableModalOpen && state.editingTable && (
-             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100]" onClick={() => actions.closeEditTable()}>
-                 <div className="bg-white dark:bg-[#252525] p-6 rounded-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+             (() => {
+               const table = state.editingTable;
+               const isSimpleRename = ['content-plan', 'backlog', 'functionality'].includes(table.type);
+               const handleSaveRename = () => {
+                 const newName = editTableName.trim();
+                 if (newName) { actions.updateTable({ ...table, name: newName }); setEditTableName(''); actions.closeEditTable(); }
+               };
+               if (isSimpleRename) {
+                 return (
+                   <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[200]" onClick={() => { setEditTableName(''); actions.closeEditTable(); }}>
+                     <div className="bg-white dark:bg-[#252525] p-6 rounded-xl w-full max-w-md shadow-xl border border-gray-200 dark:border-[#333]" onClick={e => e.stopPropagation()}>
+                       <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Переименовать страницу</h3>
+                       <input
+                         type="text"
+                         value={editTableName}
+                         onChange={e => setEditTableName(e.target.value)}
+                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSaveRename(); } }}
+                         className="w-full bg-white dark:bg-[#333] text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-[#555] rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none mb-4"
+                         placeholder="Название страницы"
+                         autoFocus
+                       />
+                       <div className="flex gap-2 justify-end">
+                         <button type="button" onClick={() => { setEditTableName(''); actions.closeEditTable(); }} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#333] rounded-lg">Отмена</button>
+                         <button type="button" onClick={handleSaveRename} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Сохранить</button>
+                       </div>
+                     </div>
+                   </div>
+                 );
+               }
+               return (
+                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100]" onClick={() => actions.closeEditTable()}>
+                   <div className="bg-white dark:bg-[#252525] p-6 rounded-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
                      <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Редактировать страницу</h3>
                      <SettingsModal 
                         users={state.users} projects={state.projects} statuses={state.statuses} priorities={state.priorities} tables={state.tables}
@@ -310,8 +346,10 @@ const App = () => {
                         onUpdateUsers={() => {}} onUpdateProjects={() => {}} onUpdateStatuses={() => {}} onUpdatePriorities={() => {}}
                         onUpdateNotificationPrefs={() => {}}
                      />
+                   </div>
                  </div>
-             </div>
+               );
+             })()
         )}
     </div>
   );
