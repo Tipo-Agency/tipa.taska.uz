@@ -20,7 +20,12 @@ const App = () => {
   const { state, actions } = useAppLogic();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [firebaseAuthReady, setFirebaseAuthReady] = useState(false);
-  const [publicContentPlanId, setPublicContentPlanId] = useState<string | null>(null);
+  // Публичная ссылка: определяем сразу по pathname, чтобы не показывать логин неавторизованным
+  const [publicContentPlanId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const m = window.location.pathname.match(/^\/content-plan\/(.+)$/);
+    return m ? m[1] : null;
+  });
   const [editTableName, setEditTableName] = useState('');
 
   useEffect(() => {
@@ -31,16 +36,7 @@ const App = () => {
   // Telegram Web App initialization - ДОЛЖЕН БЫТЬ ДО ВСЕХ УСЛОВНЫХ RETURN!
   const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
   
-  // Проверка публичной ссылки на контент-план
-  useEffect(() => {
-    const path = window.location.pathname;
-    const match = path.match(/^\/content-plan\/(.+)$/);
-    if (match) {
-      setPublicContentPlanId(match[1]);
-    }
-  }, []);
-
-  // Firebase Auth initialization
+  // Firebase Auth initialization (для публичной ссылки не ждём — рендер уже отдан PublicContentPlanView)
   useEffect(() => {
     console.log('[App] Initializing Firebase Auth...');
     initFirebaseAuth().then((user) => {
